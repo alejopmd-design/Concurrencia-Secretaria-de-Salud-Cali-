@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo de Gestión Operativa y Concurrencia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .input-field { width: 100%; padding: 0.65rem 0.875rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; }
+        .input-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        
+        /* Semáforos */
+        .semaforo-rojo { background-color: #fef2f2; border-left: 4px solid #ef4444; }
+        .semaforo-amarillo { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
+        .semaforo-verde { background-color: #f0fdf4; border-left: 4px solid #10b981; }
+        
+        .badge-rojo { background-color: #fee2e2; color: #991b1b; }
+        .badge-amarillo { background-color: #fef3c7; color: #92400e; }
+        .badge-verde { background-color: #d1fae5; color: #065f46; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white border-b-4 border-blue-600 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-5">
+                <img src="logo.jpg" alt="Logo Red" class="h-16 w-16 object-contain bg-white rounded shadow border border-white/20" onerror="this.style.display='none'">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight">Centro de Gestión Documental</h1>
+                    <p class="text-slate-400 text-sm mt-0.5">Asignación de Conductas, Tiempos y Desescalonamiento</p>
+                </div>
+            </div>
+            <button onclick="obtenerPacientes()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 px-4 rounded shadow">
+                Sincronizar Lista
+            </button>
+        </div>
+    </header>
+
+    <div id="notificacion-estado" class="bg-slate-700 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider">Cargando censo de la red...</div>
+
+    <section class="max-w-7xl mx-auto px-4 mt-6 w-full">
+        
+        <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-px">
+            <button onclick="filtrarPorEstado('TODOS')" id="tab-TODOS" class="px-4 py-2.5 font-bold text-sm rounded-t-lg bg-blue-600 text-white transition-colors">Todos los Casos</button>
+            <button onclick="filtrarPorEstado('Pendiente')" id="tab-Pendiente" class="px-4 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200">🔴 Pendientes</button>
+            <button onclick="filtrarPorEstado('En trámite')" id="tab-Tramite" class="px-4 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200">🟡 En Trámite / Activos</button>
+            <button onclick="filtrarPorEstado('Desescalonado')" id="tab-Desescalonado" class="px-4 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200">🟢 Desescalonados</button>
+        </div>
+
+        <div class="bg-white p-4 border-x border-b border-slate-200 rounded-b-lg shadow-sm mb-4 flex flex-col md:flex-row gap-3">
+            <div class="flex-1">
+                <input type="text" id="buscador-texto" onkeyup="renderizarLista()" placeholder="🔍 Buscar por nombre, cédula o EPS..." class="input-field bg-slate-50 border-slate-300">
+            </div>
+            <div class="md:w-1/4">
+                <select id="filtro-ips" onchange="renderizarLista()" class="input-field bg-slate-50 border-slate-300 font-medium">
+                    <option value="">🏥 Todas las IPS</option>
+                </select>
+            </div>
+            <div class="md:w-1/4">
+                <select id="filtro-eps" onchange="renderizarLista()" class="input-field bg-slate-50 border-slate-300 font-medium">
+                    <option value="">🛡️ Todas las EPS</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex justify-end gap-2 mb-4">
+            <button onclick="exportarExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded shadow flex items-center gap-1 transition-colors">
+                📊 Exportar Excel
+            </button>
+            <button onclick="exportarPDF()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 px-4 rounded shadow flex items-center gap-1 transition-colors">
+                📄 Exportar PDF
+            </button>
+        </div>
+
+        <div id="contenedor-pacientes" class="grid grid-cols-1 gap-3 py-2">
+            </div>
+    </section>
+
+    <div id="modal-gestion" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-end z-50 animate-fade-in">
+        <div class="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col overflow-y-auto">
+            
+            <div class="bg-slate-800 text-white px-6 py-5 flex justify-between items-center border-b border-blue-500">
+                <div>
+                    <h2 class="text-lg font-bold" id="modal-paciente-nombre">Nombre del Paciente</h2>
+                    <p class="text-xs text-slate-400" id="modal-paciente-id">ID Doc: </p>
+                </div>
+                <button onclick="cerrarModal()" class="text-slate-400 hover:text-white font-bold text-xl">&times;</button>
+            </div>
+
+            <div class="bg-slate-50 p-4 border-b border-slate-200 text-xs space-y-2">
+                <p><b>IPS Actual:</b> <span id="lbl-ips"></span> | <b>Asegurador:</b> <span id="lbl-eps"></span> | <b>Régimen:</b> <span id="lbl-regimen"></span></p>
+                <p><b>Diagnóstico:</b> <span id="lbl-diagnostico"></span></p>
+                <p><b>Servicio Requerido:</b> <span id="lbl-servicio"></span> (<span id="lbl-complejidad"></span>)</p>
+            </div>
+
+            <form id="form-gestion" class="p-6 flex-1 space-y-5">
+                <input type="hidden" id="edit-id">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Estado de la Gestión *</label>
+                    <select id="edit-estado_gestion" class="input-field border-blue-400 font-semibold text-blue-900">
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="En trámite">En trámite</option>
+                        <option value="Gestionado">Gestionado</option>
+                        <option value="Desescalonado">Desescalonado</option>
+                        <option value="Autorizado sigue en IPS">Autorizado sigue en IPS</option>
+                        <option value="No autorizado sigue en IPS">No autorizado sigue en IPS</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Triage</label>
+                        <select id="edit-triage" class="input-field">
+                            <option value="">No Asignado</option>
+                            <option value="1">Triage 1 - Reanimación</option>
+                            <option value="2">Triage 2 - Emergencia</option>
+                            <option value="3">Triage 3 - Urgencia</option>
+                            <option value="4">Triage 4 - Prioritaria</option>
+                            <option value="5">Triage 5 - No Urgente</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Especialidad Requerida</label>
+                        <select id="edit-especialidad_nivel" class="input-field">
+                            <option value="">Seleccione una especialidad...</option>
+                            <option value="Medicina Interna">Medicina Interna</option><option value="Cirugía General">Cirugía General</option><option value="Pediatría">Pediatría</option><option value="Ginecobstetricia">Ginecobstetricia</option><option value="Ortopedia">Ortopedia</option><option value="Cuidado Intensivo">Cuidado Intensivo</option><option value="Neurología">Neurología</option><option value="Neurocirugía">Neurocirugía</option><option value="Cardiología">Cardiología</option><option value="Hemodinamia">Hemodinamia</option><option value="Cirugía Cardiovascular">Cirugía Cardiovascular</option><option value="Cirugía de Tórax">Cirugía de Tórax</option><option value="Cirugía Vascular">Cirugía Vascular</option><option value="Urología">Urología</option><option value="Nefrología">Nefrología</option><option value="Gastroenterología">Gastroenterología</option><option value="Neumología">Neumología</option><option value="Endocrinología">Endocrinología</option><option value="Infectología">Infectología</option><option value="Reumatología">Reumatología</option><option value="Hematología">Hematología</option><option value="Oncología">Oncología</option><option value="Cirugía Pediátrica">Cirugía Pediátrica</option><option value="Cirugía Plástica">Cirugía Plástica</option><option value="Cirugía Maxilofacial">Cirugía Maxilofacial</option><option value="Otorrinolaringología">Otorrinolaringología</option><option value="Oftalmología">Oftalmología</option><option value="Dermatología">Dermatología</option><option value="Psiquiatría">Psiquiatría</option><option value="Fisiatría">Fisiatría</option><option value="Medicina del Dolor y Cuidado Paliativo">Medicina del Dolor y Cuidado Paliativo</option><option value="Nutrición Clínica">Nutrición Clínica</option><option value="Terminar Manejo Antibiótico">Terminar Manejo Antibiótico</option><option value="Cuidado en Casa">Cuidado en Casa</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tipo de Barrera Detectada</label>
+                        <select id="edit-tipo_barrera" class="input-field">
+                            <option value="">Ninguna / Sin Barrera</option>
+                            <option value="Barrera Clínica">Barrera Clínica</option>
+                            <option value="Barrera Administrativa">Barrera Administrativa</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Trámites iniciados por IPS</label>
+                        <select id="edit-inicio_tramites_ips" class="input-field">
+                            <option value="">No Definido</option>
+                            <option value="SI">SI</option>
+                            <option value="NO">NO</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tiempo de Estancia (Horas)</label>
+                        <input type="number" id="edit-tiempo_estancia_horas" placeholder="Ej. 24" class="input-field">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Auditor Responsable del Caso</label>
+                        <input type="text" id="edit-responsable" placeholder="Nombre del auditor" class="input-field">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Evolución / Observaciones de Concurrencia</label>
+                    <textarea id="edit-observaciones" rows="5" placeholder="Escriba el estado actual de los trámites, contactos con la EPS o motivos de retraso..." class="input-field"></textarea>
+                </div>
+
+                <div class="pt-4 border-t flex justify-end gap-3">
+                    <button type="button" onclick="cerrarModal()" class="px-4 py-2 border rounded text-slate-600 font-semibold text-sm bg-slate-50 hover:bg-slate-100">Cancelar</button>
+                    <button type="button" onclick="guardarCambiosGestion()" class="px-6 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded text-sm shadow">Actualizar Caso</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const urlBase = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/consolidado_pacientes';
+        const tokenAnon = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWpudWVrdWdvZmZ5YnRzZ2ZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MDQ4MjUsImV4cCI6MjA5NTM4MDgyNX0.7d9kFfhX4mGXPAGDjZKxg0r3-bB2V2KvdsSzk5Ys_zI';
+
+        let censoCompleto = [];
+        let estadoFiltroActual = 'TODOS';
+
+        function actualizarBanner(mensaje, tipo = 'info') {
+            const b = document.getElementById('notificacion-estado');
+            b.innerText = mensaje;
+            if (tipo === 'error') b.className = "bg-red-600 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider";
+            else if (tipo === 'exito') b.className = "bg-emerald-600 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider";
+            else b.className = "bg-slate-700 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider";
+        }
+
+        async function obtenerPacientes() {
+            actualizarBanner("⏳ Descargando censo nominal desde Supabase...");
+            try {
+                const respuesta = await fetch(`${urlBase}?select=*`, {
+                    method: 'GET',
+                    headers: { 'apikey': tokenAnon, 'Authorization': 'Bearer ' + tokenAnon }
+                });
+                
+                if (!respuesta.ok) throw new Error("No se pudo leer la información.");
+                
+                censoCompleto = await respuesta.json();
+                
+                // Ordenar cronológicamente
+                censoCompleto.sort((a, b) => {
+                    let dateA = a.fecha_reporte ? new Date(a.fecha_reporte) : new Date(0);
+                    let dateB = b.fecha_reporte ? new Date(b.fecha_reporte) : new Date(0);
+                    return dateA - dateB;
+                });
+
+                poblarFiltrosDesplegables(); // Llena las listas de IPS y EPS
+                renderizarLista();
+                actualizarBanner(`✅ Censo sincronizado: ${censoCompleto.length} casos listos para auditoría.`, 'exito');
+            } catch (err) {
+                actualizarBanner(`❌ ERROR: ${err.message}`, 'error');
+            }
+        }
+
+        // Llenado automático de los desplegables de búsqueda basados en los datos descargados
+        function poblarFiltrosDesplegables() {
+            const selectIps = document.getElementById('filtro-ips');
+            const selectEps = document.getElementById('filtro-eps');
+
+            // Extraer valores únicos, filtrando nulos y ordenándolos alfabéticamente
+            const ipsUnicas = [...new Set(censoCompleto.map(p => p.ips_actual).filter(Boolean))].sort();
+            const epsUnicas = [...new Set(censoCompleto.map(p => p.eps).filter(Boolean))].sort();
+
+            // Rellenar HTML
+            selectIps.innerHTML = '<option value="">🏥 Todas las IPS</option>' + ipsUnicas.map(ips => `<option value="${ips}">${ips}</option>`).join('');
+            selectEps.innerHTML = '<option value="">🛡️ Todas las EPS</option>' + epsUnicas.map(eps => `<option value="${eps}">${eps}</option>`).join('');
+        }
+
+        // SISTEMA DE PESTAÑAS (Mapeo seguro sin tildes en los IDs)
+        function filtrarPorEstado(estado) {
+            estadoFiltroActual = estado;
+            
+            const mapaTabs = {
+                'TODOS': 'tab-TODOS',
+                'Pendiente': 'tab-Pendiente',
+                'En trámite': 'tab-Tramite',
+                'Desescalonado': 'tab-Desescalonado'
+            };
+
+            // Apagar todas las pestañas
+            Object.values(mapaTabs).forEach(id => {
+                const elem = document.getElementById(id);
+                if(elem) {
+                    elem.className = "px-4 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200";
+                }
+            });
+
+            // Encender la seleccionada
+            const tabActivo = document.getElementById(mapaTabs[estado]);
+            if(tabActivo) {
+                tabActivo.className = "px-4 py-2.5 font-bold text-sm rounded-t-lg bg-blue-600 text-white transition-colors";
+            }
+
+            renderizarLista();
+        }
+
+        // --- FUNCIÓN CENTRAL DE FILTRADO ---
+        function getPacientesFiltrados() {
+            const busquedaTexto = document.getElementById('buscador-texto').value.toLowerCase();
+            const ipsSeleccionada = document.getElementById('filtro-ips').value;
+            const epsSeleccionada = document.getElementById('filtro-eps').value;
+
+            let filtrados = censoCompleto;
+
+            if (estadoFiltroActual !== 'TODOS') {
+                if (estadoFiltroActual === 'En trámite') {
+                    filtrados = filtrados.filter(p => p.estado_gestion !== 'Pendiente' && p.estado_gestion !== 'Desescalonado');
+                } else {
+                    filtrados = filtrados.filter(p => p.estado_gestion === estadoFiltroActual);
+                }
+            }
+
+            if (busquedaTexto) {
+                filtrados = filtrados.filter(p => 
+                    (p.nombres_apellidos && p.nombres_apellidos.toLowerCase().includes(busquedaTexto)) ||
+                    (p.numero_identificacion && p.numero_identificacion.toString().includes(busquedaTexto)) ||
+                    (p.eps && p.eps.toLowerCase().includes(busquedaTexto))
+                );
+            }
+
+            if (ipsSeleccionada) {
+                filtrados = filtrados.filter(p => p.ips_actual === ipsSeleccionada);
+            }
+
+            if (epsSeleccionada) {
+                filtrados = filtrados.filter(p => p.eps === epsSeleccionada);
+            }
+
+            return filtrados;
+        }
+
+        function renderizarLista() {
+            const lista = document.getElementById('contenedor-pacientes');
+            lista.innerHTML = '';
+
+            let filtrados = getPacientesFiltrados();
+
+            if (filtrados.length === 0) {
+                lista.innerHTML = `<div class="bg-white text-center py-10 text-slate-500 rounded-lg shadow-sm border font-medium">No se encontraron pacientes que coincidan con estos filtros.</div>`;
+                return;
+            }
+
+            filtrados.forEach(p => {
+                let claseSemaforo = "semaforo-amarillo";
+                let claseBadge = "badge-amarillo";
+                let est = p.estado_gestion || 'Pendiente';
+
+                if (est === 'Pendiente') {
+                    claseSemaforo = "semaforo-rojo";
+                    claseBadge = "badge-rojo";
+                } else if (est === 'Desescalonado') {
+                    claseSemaforo = "semaforo-verde";
+                    claseBadge = "badge-verde";
+                }
+
+                let hrs = p.tiempo_estancia_horas ? `${p.tiempo_estancia_horas}h` : '0h';
+                let resp = p.responsable ? `👤 Responsable: ${p.responsable}` : '👤 Sin responsable asignado';
+                let barreraText = p.tipo_barrera ? `⚠️ ${p.tipo_barrera}` : '✅ Sin barreras';
+
+                lista.innerHTML += `
+                    <div onclick="abrirModal(${JSON.stringify(p).replace(/"/g, '&quot;')})" class="${claseSemaforo} bg-white p-4 rounded-lg border border-slate-200 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.002] transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div class="space-y-1 w-full md:w-auto">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-xs font-bold text-slate-400 font-mono">[${p.fecha_reporte || 'Sin Fecha'}]</span>
+                                <h3 class="font-bold text-slate-900 text-base">${p.nombres_apellidos}</h3>
+                                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold ${claseBadge}">${est}</span>
+                            </div>
+                            <p class="text-xs text-slate-600 font-medium">
+                                <b>${p.ips_actual}</b> &rarr; Requiere: <span class="text-blue-700 font-semibold">${p.especialidad_nivel || 'General'}</span> (${p.nivel_complejidad || 'Baja'})
+                            </p>
+                            <p class="text-xs text-slate-600 font-medium mt-1">
+                                <b>Triage:</b> <span class="font-bold text-slate-800">${p.triage ? 'Triage ' + p.triage : 'No Asignado'}</span>
+                            </p>
+                            <div class="text-[11px] text-slate-500 flex flex-wrap gap-4 pt-1 border-t border-slate-100 mt-2">
+                                <span class="bg-slate-100 px-2 py-0.5 rounded">🆔 ${p.tipo_id || 'CC'} ${p.numero_identificacion}</span>
+                                <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">🏢 EPS: ${p.eps || 'No especifica'}</span>
+                                <span class="font-medium text-slate-700 py-0.5">${resp}</span>
+                            </div>
+                        </div>
+                        <div class="flex md:flex-col items-end gap-2 w-full md:w-auto border-t md:border-0 pt-2 md:pt-0 justify-between md:min-w-[140px]">
+                            <span class="text-xs font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-1 rounded w-full md:w-auto text-center">Estancia: ${hrs}</span>
+                            <span class="text-xs font-medium text-slate-500 w-full md:w-auto text-center truncate">${barreraText}</span>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function abrirModal(paciente) {
+            document.getElementById('edit-id').value = paciente.id;
+            document.getElementById('modal-paciente-nombre').innerText = paciente.nombres_apellidos;
+            document.getElementById('modal-paciente-id').innerText = `Documento: ${paciente.tipo_id || 'CC'} ${paciente.numero_identificacion}`;
+            
+            document.getElementById('lbl-ips').innerText = paciente.ips_actual || '-';
+            document.getElementById('lbl-eps').innerText = paciente.eps || '-';
+            document.getElementById('lbl-regimen').innerText = paciente.regimen || '-';
+            document.getElementById('lbl-diagnostico').innerText = paciente.patologia_diagnostico || '-';
+            document.getElementById('lbl-servicio').innerText = paciente.especialidad_nivel || '-';
+            document.getElementById('lbl-complejidad').innerText = paciente.nivel_complejidad || '-';
+
+            document.getElementById('edit-estado_gestion').value = paciente.estado_gestion || 'Pendiente';
+            document.getElementById('edit-triage').value = paciente.triage || '';
+            document.getElementById('edit-especialidad_nivel').value = paciente.especialidad_nivel || '';
+            document.getElementById('edit-tipo_barrera').value = paciente.tipo_barrera || '';
+            document.getElementById('edit-inicio_tramites_ips').value = paciente.inicio_tramites_ips || '';
+            document.getElementById('edit-tiempo_estancia_horas').value = paciente.tiempo_estancia_horas || '';
+            document.getElementById('edit-responsable').value = paciente.responsable || '';
+            document.getElementById('edit-observaciones').value = paciente.observaciones || '';
+
+            document.getElementById('modal-gestion').classList.remove('hidden');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-gestion').classList.add('hidden');
+        }
+
+        async function guardarCambiosGestion() {
+            const idPaciente = document.getElementById('edit-id').value;
+            const horasValue = document.getElementById('edit-tiempo_estancia_horas').value;
+
+            const datosActualizados = {
+                estado_gestion: document.getElementById('edit-estado_gestion').value,
+                triage: document.getElementById('edit-triage').value ? parseInt(document.getElementById('edit-triage').value) : null,
+                especialidad_nivel: document.getElementById('edit-especialidad_nivel').value || null,
+                tipo_barrera: document.getElementById('edit-tipo_barrera').value || null,
+                inicio_tramites_ips: document.getElementById('edit-inicio_tramites_ips').value || null,
+                tiempo_estancia_horas: horasValue ? Number(horasValue) : null,
+                responsable: document.getElementById('edit-responsable').value || null,
+                observaciones: document.getElementById('edit-observaciones').value || null
+            };
+
+            try {
+                const respuesta = await fetch(`${urlBase}?id=eq.${idPaciente}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': tokenAnon,
+                        'Authorization': 'Bearer ' + tokenAnon,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(datosActualizados)
+                });
+
+                if (!respuesta.ok) {
+                    const errBody = await respuesta.json();
+                    throw new Error(errBody.message || "Error al actualizar.");
+                }
+
+                cerrarModal();
+                await obtenerPacientes(); 
+                actualizarBanner("✅ ¡Éxito! El caso operativo ha sido actualizado en Supabase y el semáforo cambió.", 'exito');
+            } catch (err) {
+                alert("Error al guardar gestión:\n" + err.message);
+                actualizarBanner(`❌ Falló la actualización: ${err.message}`, 'error');
+            }
+        }
+
+        // -- FUNCIONES DE EXPORTACIÓN --
+        function exportarExcel() {
+            const datos = getPacientesFiltrados();
+            if (datos.length === 0) return alert("No hay datos para exportar con los filtros actuales.");
+
+            const datosExcel = datos.map(p => ({
+                "Fecha Ingreso": p.fecha_reporte || '',
+                "Tipo Doc": p.tipo_id || '',
+                "Documento": p.numero_identificacion || '',
+                "Nombre Completo": p.nombres_apellidos || '',
+                "EPS": p.eps || '',
+                "IPS Actual": p.ips_actual || '',
+                "Régimen": p.regimen || '',
+                "Triage": p.triage || 'N/A',
+                "Especialidad Requerida": p.especialidad_nivel || '',
+                "Diagnóstico": p.patologia_diagnostico || '',
+                "Estado de Gestión": p.estado_gestion || '',
+                "Estancia (Horas)": p.tiempo_estancia_horas || 0,
+                "Barrera": p.tipo_barrera || 'Ninguna'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(datosExcel);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Pacientes_Filtrados");
+            XLSX.writeFile(wb, "Reporte_Pacientes.xlsx");
+        }
+
+        function exportarPDF() {
+            const datos = getPacientesFiltrados();
+            if (datos.length === 0) return alert("No hay datos para exportar con los filtros actuales.");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape'); 
+
+            doc.setFontSize(14);
+            doc.text("Reporte Operativo de Pacientes (Red de Alta Complejidad)", 14, 15);
+            doc.setFontSize(9);
+            doc.setTextColor(100);
+            doc.text(`Filtro Activo: ${estadoFiltroActual} | Total Pacientes: ${datos.length} | Fecha: ${new Date().toLocaleDateString()}`, 14, 22);
+
+            const filasBD = datos.map(p => [
+                p.fecha_reporte || '',
+                `${p.tipo_id || ''} ${p.numero_identificacion || ''}`,
+                p.nombres_apellidos || '',
+                p.eps || '',
+                p.ips_actual || '',
+                p.triage || '-',
+                p.especialidad_nivel || '',
+                p.estado_gestion || '',
+                `${p.tiempo_estancia_horas || '0'}h`
+            ]);
+
+            doc.autoTable({
+                startY: 28,
+                head: [['Fecha', 'Documento', 'Paciente', 'EPS', 'IPS Actual', 'Triage', 'Especialidad', 'Estado', 'Estancia']],
+                body: filasBD,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [30, 58, 138] }, 
+                alternateRowStyles: { fillColor: [248, 250, 252] } 
+            });
+
+            doc.save("Reporte_Pacientes.pdf");
+        }
+
+        document.addEventListener('DOMContentLoaded', obtenerPacientes);
+    </script>
+</body>
+</html>

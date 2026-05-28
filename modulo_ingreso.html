@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingreso de Pacientes - Red de Alta Complejidad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #334155; }
+        .input-field { width: 100%; padding: 0.65rem 0.875rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; transition: all 0.2s; }
+        .input-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        .error-border { border-color: #ef4444 !important; background-color: #fef2f2 !important; border-width: 2px !important; }
+        
+        .section-title { font-size: 0.875rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.25rem; margin-bottom: 1rem; margin-top: 1.5rem; }
+        label { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; text-transform: uppercase; }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 sm:px-6 flex justify-center">
+
+    <div class="w-full max-w-4xl bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+        
+        <div class="bg-slate-800 px-8 py-6 text-white flex justify-between items-center">
+            <div class="flex items-center gap-5">
+                <img src="logo.jpg" alt="Logo Red" class="h-20 rounded shadow-md border-2 border-white/20 bg-white object-contain"
+                     onerror="this.onerror=null; this.outerHTML='<span class=\'bg-red-500 text-white text-xs px-2 py-1 rounded\'>Falta logo.jpg</span>';">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight">Formulario de Ingreso Nominal</h1>
+                    <p class="text-slate-300 text-sm mt-1">Sincronizado con Base de Datos Central</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="caja-mensajes" class="hidden mx-8 mt-6 p-4 rounded-lg font-semibold text-sm border-l-4 shadow-sm transition-all"></div>
+
+        <form id="formulario-paciente" class="px-8 pb-8 pt-4">
+            
+            <h2 class="section-title">1. Datos Personales</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div>
+                    <label>Tipo Doc.</label>
+                    <select id="tipo_id" class="input-field bg-slate-50">
+                        <option value="CC" selected>Cédula de Ciudadanía</option>
+                        <option value="TI">Tarjeta de Identidad</option>
+                        <option value="CE">Cédula de Extranjería</option>
+                        <option value="RC">Registro Civil</option>
+                        <option value="PPT">Permiso (PPT)</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label>Número de Documento * (Solo números)</label>
+                    <input type="text" id="numero_identificacion" pattern="[0-9]+" placeholder="Ej. 1144000000" class="input-field req-field">
+                </div>
+                <div class="md:col-span-2">
+                    <label>Nombres y Apellidos *</label>
+                    <input type="text" id="nombres_apellidos" placeholder="Nombre completo" class="input-field req-field">
+                </div>
+                <div>
+                    <label>Teléfono de Contacto (Solo números)</label>
+                    <input type="text" id="telefono_contacto" pattern="[0-9]+" placeholder="Celular o Fijo" class="input-field">
+                </div>
+                <div>
+                    <label>Procedencia (Municipio/Depto)</label>
+                    <input type="text" id="procedencia" placeholder="Ej. Cali - Valle" class="input-field">
+                </div>
+            </div>
+
+            <h2 class="section-title">2. Ubicación y Aseguramiento</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div class="md:col-span-1">
+                    <label>Régimen</label>
+                    <select id="regimen" class="input-field">
+                        <option value="contributivo" selected>Contributivo</option>
+                        <option value="subsidiado">Subsidiado</option>
+                        <option value="especial">Especial / Excepción</option>
+                        <option value="particular">Particular</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label>Asegurador (EPS) *</label>
+                    <input type="text" id="eps" list="eps-list" placeholder="Seleccione o escriba la EPS" class="input-field req-field">
+                    <datalist id="eps-list">
+                        <option value="Sanitas"><option value="Nueva EPS"><option value="Salud Total"><option value="Emssanar"><option value="Asmet Salud"><option value="Sura"><option value="Coosalud"><option value="Compensar">
+                    </datalist>
+                </div>
+                
+                <div class="md:col-span-3">
+                    <label>IPS Origen / Actual *</label>
+                    <input type="text" id="ips_actual" list="lista-ips" placeholder="Escribe para buscar la IPS..." class="input-field req-field border-blue-400">
+                    <datalist id="lista-ips">
+                        <option value="Hospital Universitario del Valle">
+                        <option value="Fundación Valle del Lili">
+                        <option value="Clínica de Occidente">
+                        <option value="Clínica Imbanaco">
+                        <option value="Clínica Cali">
+                        <option value="Clínica Nuestra Señora de los Remedios">
+                        <option value="Clínica Farallones">
+                        <option value="Dime Clínica Neurocardiovascular">
+                        <option value="Clínica Colsanitas Sebastián del Belalcazar">
+                        <option value="Clínica Rey David">
+                        <option value="Clínica Colombia">
+                        <option value="Fundación Valle del Lili Sede Limonar">
+                        <option value="Clínica Versalles">
+                        <option value="Fundación Clínica Infantil Club Noel">
+                        <option value="Clínica Desa">
+                        <option value="Clínica Nueva Rafael Uribe Uribe">
+                        <option value="Hospital San Juan de Dios">
+                        <option value="Clínica Nueva de Cali Sede La Quinta">
+                        <option value="Hospital Departamental Mario Correa Rengifo">
+                        <option value="Clínica Nuestra">
+                        <option value="Hospital Isaías Duarte Cancino">
+                        <option value="Clínica Al Alba">
+                        <option value="Clínica Valle Salud Sede Norte">
+                        <option value="Hospital Unitrauma">
+                        <option value="Occisalud">
+                        <option value="Clínica Valle Salud Sede Sur">
+                        <option value="Clínica Valle salud Sede Oriente">
+                        <option value="Unidad de Urgencias Cali - Sanitas">
+                        <option value="Hospital Carlos Holmes Trujillo">
+                        <option value="Centro de Salud Siloe">
+                        <option value="Hospital Primitivo Iglesias">
+                        <option value="Hospital Cañaveralejo">
+                        <option value="Hospital Psiquiátrico Universitario del Valle">
+                        <option value="Centro de Salud Terrón Colorado">
+                        <option value="Unidad Médica Quirúrgica Salud Cali">
+                        <option value="Hospital Carlos Carmona Montoya">
+                        <option value="Centro de Salud Decepaz">
+                        <option value="Virrey Solis Complejo Medico Versalles">
+                        <option value="Centro Medico Ip Salud">
+                        <option value="Hospital Joaquín Paz Borrero">
+                        <option value="Clínica Versalles Sede San Marcos">
+                        <option value="IPS Sura Chipichape">
+                        <option value="IPS Sura Paso Ancho Cali">
+                    </datalist>
+                </div>
+            </div>
+
+            <h2 class="section-title">3. Requerimiento Clínico</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                    <label>Triage</label>
+                    <select id="triage" class="input-field">
+                        <option value="" selected>Seleccione el Triage...</option>
+                        <option value="1">Triage 1 - Reanimación</option>
+                        <option value="2">Triage 2 - Emergencia</option>
+                        <option value="3">Triage 3 - Urgencia</option>
+                        <option value="4">Triage 4 - Prioritaria</option>
+                        <option value="5">Triage 5 - No Urgente</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Patología / Diagnóstico Principal *</label>
+                    <input type="text" id="patologia_diagnostico" placeholder="Motivo de atención" class="input-field req-field">
+                </div>
+                <div>
+                    <label>Especialidad Requerida *</label>
+                    <select id="especialidad_nivel" class="input-field req-field">
+                        <option value="" selected>Seleccione una especialidad...</option>
+                        <option value="Medicina Interna">Medicina Interna</option>
+                        <option value="Cirugía General">Cirugía General</option>
+                        <option value="Pediatría">Pediatría</option>
+                        <option value="Ginecobstetricia">Ginecobstetricia</option>
+                        <option value="Ortopedia">Ortopedia</option>
+                        <option value="Cuidado Intensivo">Cuidado Intensivo</option>
+                        <option value="Neurología">Neurología</option>
+                        <option value="Neurocirugía">Neurocirugía</option>
+                        <option value="Cardiología">Cardiología</option>
+                        <option value="Hemodinamia">Hemodinamia</option>
+                        <option value="Cirugía Cardiovascular">Cirugía Cardiovascular</option>
+                        <option value="Cirugía de Tórax">Cirugía de Tórax</option>
+                        <option value="Cirugía Vascular">Cirugía Vascular</option>
+                        <option value="Urología">Urología</option>
+                        <option value="Nefrología">Nefrología</option>
+                        <option value="Gastroenterología">Gastroenterología</option>
+                        <option value="Neumología">Neumología</option>
+                        <option value="Endocrinología">Endocrinología</option>
+                        <option value="Infectología">Infectología</option>
+                        <option value="Reumatología">Reumatología</option>
+                        <option value="Hematología">Hematología</option>
+                        <option value="Oncología">Oncología</option>
+                        <option value="Cirugía Pediátrica">Cirugía Pediátrica</option>
+                        <option value="Cirugía Plástica">Cirugía Plástica</option>
+                        <option value="Cirugía Maxilofacial">Cirugía Maxilofacial</option>
+                        <option value="Otorrinolaringología">Otorrinolaringología</option>
+                        <option value="Oftalmología">Oftalmología</option>
+                        <option value="Dermatología">Dermatología</option>
+                        <option value="Psiquiatría">Psiquiatría</option>
+                        <option value="Fisiatría">Fisiatría</option>
+                        <option value="Medicina del Dolor y Cuidado Paliativo">Medicina del Dolor y Cuidado Paliativo</option>
+                        <option value="Nutrición Clínica">Nutrición Clínica</option>
+                        <option value="Terminar Manejo Antibiótico">Terminar Manejo Antibiótico</option>
+                        <option value="Cuidado en Casa">Cuidado en Casa</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Nivel de Complejidad</label>
+                    <select id="nivel_complejidad" class="input-field">
+                        <option value="Alta Complejidad" selected>Alta Complejidad</option>
+                        <option value="Mediana Complejidad">Mediana Complejidad</option>
+                        <option value="Baja Complejidad">Baja Complejidad</option>
+                    </select>
+                </div>
+            </div>
+
+            <h2 class="section-title">4. Estado Operativo</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                
+                <div>
+                    <label>Estado del Trámite *</label>
+                    <select id="estado_gestion" class="input-field border-blue-400 font-medium">
+                        <option value="Pendiente" selected>Pendiente</option>
+                        <option value="En trámite">En trámite</option>
+                        <option value="Gestionado">Gestionado</option>
+                        <option value="Desescalonado">Desescalonado</option>
+                        <option value="Autorizado sigue en IPS">Autorizado sigue en IPS</option>
+                        <option value="No autorizado sigue en IPS">No autorizado sigue en IPS</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label>Barrera Identificada</label>
+                    <select id="tipo_barrera" class="input-field border-blue-400">
+                        <option value="" selected>Ninguna / Trámite Normal</option>
+                        <option value="Barrera Clínica">Barrera Clínica</option>
+                        <option value="Barrera Administrativa">Barrera Administrativa</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Tiempo de Estancia (Horas)</label>
+                    <input type="number" id="tiempo_estancia_horas" placeholder="Ej. 48" class="input-field">
+                </div>
+                <div class="md:col-span-2">
+                    <label>Observaciones Adicionales</label>
+                    <textarea id="observaciones" rows="2" placeholder="Detalles clínicos o administrativos..." class="input-field"></textarea>
+                </div>
+            </div>
+
+            <div class="pt-8 border-t border-slate-200 mt-8 flex justify-end">
+                <button type="button" onclick="document.getElementById('formulario-paciente').reset()" class="mr-4 px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Limpiar Datos</button>
+                <button type="button" id="btn-guardar" onclick="validarYGuardar()" class="px-8 py-2.5 rounded shadow-sm text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 transition-colors">
+                    Guardar Paciente
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const urlEndpoint = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/consolidado_pacientes';
+        const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWpudWVrdWdvZmZ5YnRzZ2ZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MDQ4MjUsImV4cCI6MjA5NTM4MDgyNX0.7d9kFfhX4mGXPAGDjZKxg0r3-bB2V2KvdsSzk5Ys_zI';
+
+        function mostrarMensaje(texto, tipo) {
+            const caja = document.getElementById('caja-mensajes');
+            caja.className = 'mx-8 mt-6 p-4 rounded-lg font-semibold text-sm border-l-4 shadow-sm transition-all'; 
+            
+            if(tipo === 'info') { caja.classList.add('bg-blue-50', 'text-blue-800', 'border-blue-500'); }
+            else if(tipo === 'error') { caja.classList.add('bg-red-50', 'text-red-800', 'border-red-500'); }
+            else if(tipo === 'exito') { caja.classList.add('bg-green-50', 'text-green-800', 'border-green-500'); }
+            
+            caja.innerText = texto;
+            caja.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function validarYGuardar() {
+            const btn = document.getElementById('btn-guardar');
+            
+            // 1. VALIDACIÓN VISUAL DE CAMPOS
+            let faltanDatos = false;
+            const camposRequeridos = document.querySelectorAll('.req-field');
+            
+            camposRequeridos.forEach(campo => {
+                campo.classList.remove('error-border'); 
+                if (campo.value.trim() === '') {
+                    campo.classList.add('error-border');
+                    faltanDatos = true;
+                }
+            });
+
+            if (faltanDatos) {
+                mostrarMensaje('⚠️ FALTAN DATOS: Por favor, llena todos los campos resaltados en rojo.', 'error');
+                return;
+            }
+
+            // 2. ENVÍO A SUPABASE
+            mostrarMensaje('⏳ Enviando paciente a la red... por favor espera.', 'info');
+            btn.innerText = 'Guardando...';
+            btn.disabled = true;
+
+            try {
+                let horasVal = document.getElementById('tiempo_estancia_horas').value;
+
+                const nuevoRegistro = {
+                    fecha_reporte: new Date().toISOString().split('T')[0],
+                    numero_identificacion: document.getElementById('numero_identificacion').value,
+                    nombres_apellidos: document.getElementById('nombres_apellidos').value,
+                    eps: document.getElementById('eps').value,
+                    patologia_diagnostico: document.getElementById('patologia_diagnostico').value,
+                    ips_actual: document.getElementById('ips_actual').value, // Ahora coincidirá con el Datalist
+                    especialidad_nivel: document.getElementById('especialidad_nivel').value,
+                    tipo_id: document.getElementById('tipo_id').value,
+                    telefono_contacto: document.getElementById('telefono_contacto').value || null,
+                    procedencia: document.getElementById('procedencia').value || null,
+                    regimen: document.getElementById('regimen').value,
+                    nivel_complejidad: document.getElementById('nivel_complejidad').value,
+                    triage: document.getElementById('triage').value ? parseInt(document.getElementById('triage').value) : null,
+                    estado_gestion: document.getElementById('estado_gestion').value,
+                    tipo_barrera: document.getElementById('tipo_barrera').value || null,
+                    tiempo_estancia_horas: horasVal ? Number(horasVal) : null,
+                    observaciones: document.getElementById('observaciones').value || null
+                };
+
+                const respuesta = await fetch(urlEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': apiKey,
+                        'Authorization': 'Bearer ' + apiKey,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation' 
+                    },
+                    body: JSON.stringify(nuevoRegistro)
+                });
+
+                const datosRespuesta = await respuesta.json();
+
+                if (!respuesta.ok) {
+                    mostrarMensaje(`❌ ERROR DE BASE DE DATOS: ${datosRespuesta.message || JSON.stringify(datosRespuesta)}`, 'error');
+                } else {
+                    mostrarMensaje(`✅ ¡ÉXITO! El paciente se guardó correctamente. Ya puedes verlo en el Tablero de Control.`, 'exito');
+                    document.getElementById('formulario-paciente').reset();
+                    camposRequeridos.forEach(campo => campo.classList.remove('error-border'));
+                }
+
+            } catch (err) {
+                mostrarMensaje(`❌ ERROR DE NAVEGADOR: No hay internet o hay un bloqueo (${err.message})`, 'error');
+            } finally {
+                btn.innerText = 'Guardar Paciente';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
