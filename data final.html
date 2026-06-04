@@ -3,26 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuadro de Control Auditoría Concurrente</title>
+    <title>Tablero de Control de Sobreocupación y Auditoría Concurrente</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f4f7f6; color: #1e293b; text-transform: uppercase; }
-        .card { background: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; padding: 1.25rem; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; text-transform: uppercase; }
+        .card { background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; padding: 1.5rem; }
         .kpi-title { font-size: 0.75rem; font-weight: 700; color: #64748b; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
-        .kpi-value { font-size: 2rem; font-weight: 800; color: #0f172a; line-height: 1; }
-        .chart-container { position: relative; height: 260px; width: 100%; }
+        .kpi-value { font-size: 1.875rem; font-weight: 800; color: #0f172a; line-height: 1; }
+        .chart-container { position: relative; height: 280px; width: 100%; }
         
-        .input-field { padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; }
+        /* Controles de Tablas */
+        .th-sortable { cursor: pointer; user-select: none; transition: background-color 0.2s; }
+        .th-sortable:hover { background-color: rgba(0, 0, 0, 0.05); }
+        .sort-icon { font-size: 0.75rem; opacity: 0.5; margin-left: 4px; }
+        .sort-active .sort-icon { opacity: 1; color: #60a5fa; }
+        
+        .input-field { width: 100%; padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; }
         .input-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
 
-        .th-sortable { cursor: pointer; user-select: none; transition: background-color 0.2s; }
-        .th-sortable:hover { background-color: rgba(0, 0, 0, 0.1); }
-        .sort-icon { font-size: 0.7rem; opacity: 0.5; margin-left: 2px; }
-        
         ::-webkit-scrollbar { height: 6px; width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -33,474 +40,709 @@
     <div class="max-w-7xl mx-auto">
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-slate-900 p-5 rounded-xl text-white shadow-lg">
             <div class="flex items-center gap-4">
-                <img src="logo.jpg" alt="Logo Red" class="h-16 w-16 object-contain bg-white rounded shadow border border-white/20" onerror="this.style.display='none'">
+                <img src="logo.jpg" alt="Logo Red" class="h-14 w-14 object-contain bg-white rounded shadow border border-white/20" onerror="this.style.display='none'">
                 <div>
-                    <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">CUADRO DE CONTROL AUDITORÍA CONCURRENTE</h1>
-                    <p class="text-slate-400 text-xs mt-0.5">MÓDULO DE ANALÍTICA GERENCIAL - DATOS EN TIEMPO REAL</p>
+                    <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">TABLERO CENTRAL DE OPERACIONES Y AUDITORÍA</h1>
+                    <p class="text-slate-400 text-xs mt-0.5">CENTRO REGULADOR DE URGENCIAS Y EMERGENCIAS (CRUE)</p>
                 </div>
             </div>
             <div class="mt-4 md:mt-0 flex gap-2">
-                <button onclick="cargarDatos()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 text-xs rounded shadow transition-all">
-                    🔄 SINCRONIZAR TABLEROS
-                </button>
+                <button onclick="exportarInformePDF()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-4 py-2 text-xs rounded shadow transition-all">📄 EXPORTAR PDF</button>
+                <button onclick="cargarTodoElSistema()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 text-xs rounded shadow transition-all">🔄 SINCRONIZAR RED</button>
             </div>
         </header>
 
-        <div id="status-banner" class="bg-slate-700 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider mb-6 rounded-lg shadow-sm">
-            CONECTANDO CON EL MOTOR DE DATOS...
+        <div id="status-banner" class="bg-slate-700 text-white text-center py-1.5 text-xs font-bold tracking-wider mb-6 rounded-lg">
+            CONECTANDO CON SERVIDORES DE SUPABASE...
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <div class="card border-l-4 border-l-red-600 bg-red-50/10">
-                <div class="kpi-title">🔴 PENDIENTES</div>
-                <div id="kpi-pendiente" class="kpi-value text-red-600">0</div>
-            </div>
-            <div class="card border-l-4 border-l-amber-500">
-                <div class="kpi-title">🟡 EN TRÁMITE / ESPERA</div>
-                <div id="kpi-tramite" class="kpi-value text-amber-600">0</div>
-            </div>
-            <div class="card border-l-4 border-l-purple-500 bg-purple-50/20">
-                <div class="kpi-title">🟣 AUTORIZADO SIGUE IPS</div>
-                <div id="kpi-autorizado-ips" class="kpi-value text-purple-600">0</div>
-            </div>
-            <div class="card border-l-4 border-l-emerald-500">
-                <div class="kpi-title">🟢 DESESCALADOS</div>
-                <div id="kpi-desescalado" class="kpi-value text-emerald-600">0</div>
-            </div>
-            <div class="card border-l-4 border-l-indigo-500 bg-indigo-50/10">
-                <div class="kpi-title">📊 PROMEDIO TRIAGE</div>
-                <div id="kpi-promedio-triage" class="kpi-value text-indigo-600">0.0</div>
-            </div>
+        <div class="flex flex-wrap gap-2 mb-6 border-b border-slate-200 pb-px">
+            <button onclick="cambiarPestana('GENERAL')" id="tab-GENERAL" class="px-5 py-2.5 font-bold text-sm rounded-t-lg bg-blue-600 text-white transition-colors">📊 PANEL GENERAL</button>
+            <button onclick="cambiarPestana('ANALITICA')" id="tab-ANALITICA" class="px-5 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200">🧠 ANALÍTICA DE AUDITORÍA</button>
+            <button onclick="cambiarPestana('TENDENCIA')" id="tab-TENDENCIA" class="px-5 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200">📈 TENDENCIA POR IPS</button>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📋 DISTRIBUCIÓN DE ESTADOS</h2>
-                <div class="chart-container">
-                    <canvas id="chartEstados"></canvas>
+        <div id="panel-general">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                <div class="card border-l-4 border-l-blue-600 bg-blue-50/10">
+                    <div class="kpi-title">📊 PROMEDIO OCUPACIÓN RED</div>
+                    <div id="kpi-promedio-red" class="kpi-value text-blue-600">0.0%</div>
                 </div>
-            </div>
-            
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">⏱️ TIEMPO PROMEDIO DE ESTANCIA</h2>
-                <div class="chart-container">
-                    <canvas id="chartTiemposEstancia"></canvas>
+                <div class="card border-l-4 border-l-amber-500">
+                    <div class="kpi-title">🏥 IPS EN ALERTA ROJA</div>
+                    <div id="kpi-ips-alerta" class="kpi-value text-amber-600">0</div>
                 </div>
-            </div>
-
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">🎯 EFECTIVIDAD DE GESTIÓN (TOP 5 IPS)</h2>
-                <div class="chart-container">
-                    <canvas id="chartEfectividadIPS"></canvas>
+                <div class="card border-l-4 border-l-indigo-500">
+                    <div class="kpi-title">👥 PACIENTES EN AUDITORÍA</div>
+                    <div id="kpi-pacientes-auditoria" class="kpi-value text-indigo-600">0</div>
                 </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">⚕️ ESPECIALIDADES CRÍTICAS</h2>
-                <p class="text-xs text-slate-500 mb-3" style="text-transform: none;">Top especialidades de mayor a menor.</p>
-                <div class="chart-container">
-                    <canvas id="chartEspecialidad"></canvas>
+                <div class="card border-l-4 border-l-rose-500">
+                    <div class="kpi-title">🛑 CASOS PENDIENTES (EPS)</div>
+                    <div id="kpi-casos-pendientes-gral" class="kpi-value text-rose-600">0</div>
+                </div>
+                <div class="card border-l-4 border-l-red-500 bg-red-50/10 col-span-2 lg:col-span-1">
+                    <div class="kpi-title">⚠️ TOTAL SOBREOCUPADOS</div>
+                    <div id="kpi-total-sobre" class="kpi-value text-red-600">0</div>
                 </div>
             </div>
 
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚑 NIVEL DE SEVERIDAD (TRIAGE)</h2>
-                <p class="text-xs text-slate-500 mb-3" style="text-transform: none;">Volumen clasificado de mayor a menor.</p>
-                <div class="chart-container">
-                    <canvas id="chartTriageDistribucion"></canvas>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📈 EVOLUCIÓN OCUPACIÓN TOTAL (INTERVALOS 10% + TENDENCIA)</h2>
+                    <div class="chart-container">
+                        <canvas id="chartEvolucionTotal"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📊 CAPACIDAD VS SOBREOCUPACIÓN POR COMPLEJIDAD (ÚLTIMO CORTE)</h2>
+                    <div class="chart-container">
+                        <canvas id="chartColumnasApiladas"></canvas>
+                    </div>
                 </div>
             </div>
 
-            <div class="card">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚧 BARRERAS DE ACCESO</h2>
-                <p class="text-xs text-slate-500 mb-3" style="text-transform: none;">Obstáculos detectados en el sistema.</p>
-                <div class="chart-container">
-                    <canvas id="chartBarreras"></canvas>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="card lg:col-span-2">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">⚖️ IMPACTO OPERATIVO: PACIENTES PENDIENTES VS OCUPACIÓN DE LA IPS</h2>
+                    <div class="chart-container" style="height: 280px;">
+                        <canvas id="chartComparativoAuditoriaSaturacion"></canvas>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="mb-4">
-            <input type="text" id="buscador-matrices" onkeyup="renderizarTablas()" placeholder="🔍 BUSCAR POR NOMBRE DE IPS O EPS..." class="input-field w-full md:w-1/2 lg:w-1/3">
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            
-            <div class="card overflow-hidden">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">🏥 AUDITORÍA CONCURRENTE POR IPS</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[600px]">
-                        <thead>
-                            <tr class="bg-slate-900 text-white text-[10px] tracking-wider">
-                                <th class="p-3 font-semibold th-sortable" onclick="ordenarMatriz('ips', 'nombre')">IPS ACTUAL <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-red-400 th-sortable" onclick="ordenarMatriz('ips', 'Pendiente')">PEND. <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-amber-300 th-sortable" onclick="ordenarMatriz('ips', 'En trámite')">TRÁMITE <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-purple-300 th-sortable" onclick="ordenarMatriz('ips', 'Autorizado sigue en IPS')">AUTORIZADO <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-emerald-300 th-sortable" onclick="ordenarMatriz('ips', 'Desescalado')">DESESC. <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-white bg-slate-800 th-sortable" onclick="ordenarMatriz('ips', 'Total')">TOTAL <span class="sort-icon">▼</span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-ips-cuerpo" class="text-xs text-slate-700 divide-y divide-slate-200">
-                        </tbody>
-                    </table>
+                <div class="card">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚨 TOP 5 IPS CON MAYOR SOBREOCUPACIÓN</h2>
+                    <div class="chart-container" style="height: 280px;">
+                        <canvas id="chartTopSobreocupacion"></canvas>
+                    </div>
                 </div>
             </div>
 
             <div class="card overflow-hidden">
-                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">🛡️ AUDITORÍA CONCURRENTE POR EPS</h2>
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-800 tracking-wide">🧮 MATRIZ UNIFICADA DE CONTROL (ÚLTIMO REPORTE)</h2>
+                        <p class="text-xs text-slate-500 normal-case">Datos del último día de corte cruzados con la auditoría en tiempo real.</p>
+                    </div>
+                    <div class="w-full md:w-1/3">
+                        <input type="text" id="buscador-matriz-gral" onkeyup="filtrarYRenderizarMatrizGral()" placeholder="🔍 BUSCAR IPS O COMPLEJIDAD..." class="input-field">
+                    </div>
+                </div>
+                
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[600px]">
+                    <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-blue-900 text-white text-[10px] tracking-wider">
-                                <th class="p-3 font-semibold th-sortable" onclick="ordenarMatriz('eps', 'nombre')">ASEGURADOR (EPS) <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-red-400 th-sortable" onclick="ordenarMatriz('eps', 'Pendiente')">PEND. <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-amber-300 th-sortable" onclick="ordenarMatriz('eps', 'En trámite')">TRÁMITE <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-purple-300 th-sortable" onclick="ordenarMatriz('eps', 'Autorizado sigue en IPS')">AUTORIZADO <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-emerald-300 th-sortable" onclick="ordenarMatriz('eps', 'Desescalado')">DESESC. <span class="sort-icon">▼</span></th>
-                                <th class="p-3 text-center text-white bg-blue-800 th-sortable" onclick="ordenarMatriz('eps', 'Total')">TOTAL <span class="sort-icon">▼</span></th>
+                            <tr class="bg-slate-900 text-white text-[11px] tracking-wider">
+                                <th class="p-3 font-semibold th-sortable" onclick="ordenarMatrizGral('ips')">INSTITUCIÓN HOSPITALARIA (IPS) <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold th-sortable" onclick="ordenarMatrizGral('complejidad')">COMPLEJIDAD <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center th-sortable" onclick="ordenarMatrizGral('capacidad')">CAP. URG <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center th-sortable" onclick="ordenarMatrizGral('censo')">CENSO URG <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center th-sortable" onclick="ordenarMatrizGral('sobreocupacion')">SOBREOCUPACIÓN <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center th-sortable" onclick="ordenarMatrizGral('porcentaje')">OCUPACIÓN % <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center text-blue-300 th-sortable" onclick="ordenarMatrizGral('auditoria_total')">CASOS AUD. <span class="sort-icon">▼</span></th>
+                                <th class="p-3 font-semibold text-center text-red-400 th-sortable" onclick="ordenarMatrizGral('auditoria_pend')">AUD. PEND. <span class="sort-icon">▼</span></th>
                             </tr>
                         </thead>
-                        <tbody id="tabla-eps-cuerpo" class="text-xs text-slate-700 divide-y divide-slate-200">
+                        <tbody id="tabla-maestra-cuerpo" class="text-xs text-slate-700 divide-y divide-slate-200">
                         </tbody>
                     </table>
                 </div>
             </div>
+        </div>
 
+
+        <div id="panel-analitica" class="hidden">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+                <div class="card border-l-4 border-l-red-600 bg-red-50/10" style="padding: 1rem;">
+                    <div class="kpi-title">🔴 PENDIENTES</div>
+                    <div id="kpi-pendiente" class="kpi-value text-red-600">0</div>
+                </div>
+                <div class="card border-l-4 border-l-amber-500" style="padding: 1rem;">
+                    <div class="kpi-title">🟡 EN TRÁMITE / ESPERA</div>
+                    <div id="kpi-tramite" class="kpi-value text-amber-600">0</div>
+                </div>
+                <div class="card border-l-4 border-l-purple-500 bg-purple-50/20" style="padding: 1rem;">
+                    <div class="kpi-title">🟣 AUTORIZADO SIGUE IPS</div>
+                    <div id="kpi-autorizado-ips" class="kpi-value text-purple-600">0</div>
+                </div>
+                <div class="card border-l-4 border-l-emerald-500" style="padding: 1rem;">
+                    <div class="kpi-title">🟢 DESESCALADOS</div>
+                    <div id="kpi-desescalado" class="kpi-value text-emerald-600">0</div>
+                </div>
+                <div class="card border-l-4 border-l-indigo-500 bg-indigo-50/10" style="padding: 1rem;">
+                    <div class="kpi-title">📊 PROMEDIO TRIAGE</div>
+                    <div id="kpi-promedio-triage" class="kpi-value text-indigo-600">0.0</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📋 DISTRIBUCIÓN DE ESTADOS</h2>
+                    <div class="chart-container"><canvas id="chartEstados"></canvas></div>
+                </div>
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">⏱️ TIEMPO PROMEDIO DE ESTANCIA</h2>
+                    <div class="chart-container"><canvas id="chartTiemposEstancia"></canvas></div>
+                </div>
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">🎯 EFECTIVIDAD DE GESTIÓN (TOP 5 IPS)</h2>
+                    <div class="chart-container"><canvas id="chartEfectividadIPS"></canvas></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">⚕️ ESPECIALIDADES CRÍTICAS</h2>
+                    <p class="text-xs text-slate-500 mb-3 normal-case">Top especialidades de mayor a menor.</p>
+                    <div class="chart-container"><canvas id="chartEspecialidad"></canvas></div>
+                </div>
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚑 NIVEL DE SEVERIDAD (TRIAGE)</h2>
+                    <p class="text-xs text-slate-500 mb-3 normal-case">Volumen clasificado de mayor a menor.</p>
+                    <div class="chart-container"><canvas id="chartTriageDistribucion"></canvas></div>
+                </div>
+                <div class="card p-4">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚧 BARRERAS DE ACCESO</h2>
+                    <p class="text-xs text-slate-500 mb-3 normal-case">Obstáculos detectados en el sistema.</p>
+                    <div class="chart-container"><canvas id="chartBarreras"></canvas></div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <input type="text" id="buscador-matrices-analitica" onkeyup="renderizarTablasAnalitica()" placeholder="🔍 BUSCAR POR NOMBRE DE IPS O EPS..." class="input-field w-full md:w-1/2 lg:w-1/3">
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card overflow-hidden p-0">
+                    <div class="p-4 border-b border-slate-200">
+                        <h2 class="text-sm font-bold text-slate-800 tracking-wide">🏥 AUDITORÍA CONCURRENTE POR IPS</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[500px]">
+                            <thead>
+                                <tr class="bg-slate-900 text-white text-[10px] tracking-wider">
+                                    <th class="p-3 font-semibold th-sortable" onclick="ordenarTablasAnalitica('ips', 'nombre')">IPS ACTUAL <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-red-400 th-sortable" onclick="ordenarTablasAnalitica('ips', 'Pendiente')">PEND. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-amber-300 th-sortable" onclick="ordenarTablasAnalitica('ips', 'En trámite')">TRÁMITE <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-purple-300 th-sortable" onclick="ordenarTablasAnalitica('ips', 'Autorizado sigue en IPS')">AUT. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-emerald-300 th-sortable" onclick="ordenarTablasAnalitica('ips', 'Desescalado')">DESESC. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-white bg-slate-800 th-sortable" onclick="ordenarTablasAnalitica('ips', 'Total')">TOTAL <span class="sort-icon">▼</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-ips-cuerpo" class="text-xs text-slate-700 divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card overflow-hidden p-0">
+                    <div class="p-4 border-b border-blue-200">
+                        <h2 class="text-sm font-bold text-slate-800 tracking-wide">🛡️ AUDITORÍA CONCURRENTE POR EPS</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[500px]">
+                            <thead>
+                                <tr class="bg-blue-900 text-white text-[10px] tracking-wider">
+                                    <th class="p-3 font-semibold th-sortable" onclick="ordenarTablasAnalitica('eps', 'nombre')">ASEGURADOR (EPS) <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-red-400 th-sortable" onclick="ordenarTablasAnalitica('eps', 'Pendiente')">PEND. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-amber-300 th-sortable" onclick="ordenarTablasAnalitica('eps', 'En trámite')">TRÁMITE <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-purple-300 th-sortable" onclick="ordenarTablasAnalitica('eps', 'Autorizado sigue en IPS')">AUT. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-emerald-300 th-sortable" onclick="ordenarTablasAnalitica('eps', 'Desescalado')">DESESC. <span class="sort-icon">▼</span></th>
+                                    <th class="p-3 text-center text-white bg-blue-800 th-sortable" onclick="ordenarTablasAnalitica('eps', 'Total')">TOTAL <span class="sort-icon">▼</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-eps-cuerpo" class="text-xs text-slate-700 divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="panel-tendencia" class="hidden">
+            <div class="card mb-6 bg-blue-50/50 border-blue-200">
+                <label class="block text-xs font-bold text-blue-800 mb-2">SELECCIONE LA INSTITUCIÓN HOSPITALARIA (IPS) A EVALUAR:</label>
+                <select id="selector-ips" onchange="renderizarGraficaIps()" class="input-field border-blue-300 text-blue-900 font-semibold cursor-pointer">
+                    <option value="">Cargando IPS...</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="card border-l-4 border-l-blue-600">
+                    <div class="kpi-title">📅 OCUPACIÓN ÚLTIMO CORTE</div>
+                    <div id="kpi-actual" class="kpi-value text-blue-600">0.0%</div>
+                </div>
+                <div class="card border-l-4 border-l-red-500">
+                    <div class="kpi-title">🔥 PICO MÁXIMO HISTÓRICO</div>
+                    <div id="kpi-maximo" class="kpi-value text-red-600">0.0%</div>
+                </div>
+                <div class="card border-l-4 border-l-emerald-500">
+                    <div class="kpi-title">📊 PROMEDIO HISTÓRICO (IPS)</div>
+                    <div id="kpi-promedio" class="kpi-value text-emerald-600">0.0%</div>
+                </div>
+            </div>
+
+            <div class="card shadow-md">
+                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1" id="titulo-grafica-ips">📈 CURVA DE COMPORTAMIENTO: SELECCIONE UNA IPS</h2>
+                <p class="text-xs text-slate-500 mb-4 normal-case">Contraste de la ocupación de la IPS frente a la alerta roja (100%) y el promedio de toda la red.</p>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="chartEvolucionIps"></canvas>
+                </div>
+            </div>
         </div>
 
     </div>
 
     <script>
+        // Endpoints unificados
         const urlPacientes = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/consolidado_pacientes';
+        const urlOcupacion = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/ocupacion_urgencias_ips';
         const tokenAnon = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWpudWVrdWdvZmZ5YnRzZ2ZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MDQ4MjUsImV4cCI6MjA5NTM4MDgyNX0.7d9kFfhX4mGXPAGDjZKxg0r3-bB2V2KvdsSzk5Ys_zI';
 
         let instanciasGraficas = {};
-        
-        // Variables globales para tablas
+
+        // Variables Panel General
+        let datosMatrizOriginal = [];
+        let datosMatrizActual = [];
+        let columnaOrdenActual = '';
+        let ordenAscendente = true;
+        let fechaUltimoReporteGlobal = '';
+
+        // Variables Panel Analítica
         let datosTablaIps = [];
         let datosTablaEps = [];
-        let sortColIps = 'Total';
-        let sortAscIps = false; // Descendente por defecto
-        let sortColEps = 'Total';
-        let sortAscEps = false; // Descendente por defecto
+        let sortColIps = 'Total'; let sortAscIps = false;
+        let sortColEps = 'Total'; let sortAscEps = false;
 
+        // Variables Panel Tendencias
+        let fechasGlobales = [];
+        let promedioRedPorFecha = {};
+        let dataPorIps = {};
+
+        // Configuración Global ChartJS
         Chart.register(ChartDataLabels);
         Chart.defaults.font.family = "'Inter', sans-serif";
         Chart.defaults.color = '#64748b';
-        Chart.defaults.plugins.datalabels.display = true; 
+        Chart.defaults.plugins.datalabels.display = false; // Por defecto apagado para no saturar gráficas de línea
+
+        function cambiarPestana(pestana) {
+            ['panel-general', 'panel-analitica', 'panel-tendencia'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            
+            ['tab-GENERAL', 'tab-ANALITICA', 'tab-TENDENCIA'].forEach(id => {
+                document.getElementById(id).className = "px-5 py-2.5 font-bold text-sm rounded-t-lg bg-white text-slate-600 hover:bg-slate-100 transition-colors border-t border-x border-slate-200";
+            });
+
+            document.getElementById(`panel-${pestana.toLowerCase()}`).classList.remove('hidden');
+            document.getElementById(`tab-${pestana}`).className = "px-5 py-2.5 font-bold text-sm rounded-t-lg bg-blue-600 text-white transition-colors";
+
+            if (pestana === 'TENDENCIA') renderizarGraficaIps();
+        }
 
         function actualizarBanner(mensaje, tipo = 'info') {
             const b = document.getElementById('status-banner');
             b.innerText = mensaje;
-            if (tipo === 'error') b.className = "bg-red-600 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider mb-6 rounded-lg shadow-sm";
-            else if (tipo === 'exito') b.className = "bg-emerald-600 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider mb-6 rounded-lg shadow-sm";
-            else b.className = "bg-slate-700 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider mb-6 rounded-lg shadow-sm";
+            if (tipo === 'error') b.className = "bg-red-600 text-white text-center py-1.5 text-xs font-bold tracking-wider mb-6 rounded-lg";
+            else if (tipo === 'exito') b.className = "bg-emerald-600 text-white text-center py-1.5 text-xs font-bold tracking-wider mb-6 rounded-lg";
+            else b.className = "bg-slate-700 text-white text-center py-1.5 text-xs font-bold tracking-wider mb-6 rounded-lg";
         }
 
-        async function cargarDatos() {
-            actualizarBanner("⏳ LEYENDO BASE DE DATOS CENTRAL...");
+        async function cargarTodoElSistema() {
+            actualizarBanner("⏳ EXTRAYENDO CENSO CONCURRENTE Y OCUPACIÓN CRUE...");
             try {
-                const respuesta = await fetch(`${urlPacientes}?select=*`, {
-                    method: 'GET',
-                    headers: { 'apikey': tokenAnon, 'Authorization': 'Bearer ' + tokenAnon }
-                });
-
-                if (!respuesta.ok) throw new Error("Fallo en la conexión.");
+                const cabeceras = { 'apikey': tokenAnon, 'Authorization': 'Bearer ' + tokenAnon };
                 
-                const datos = await respuesta.json();
-                procesarYRenderizar(datos);
-                actualizarBanner(`✅ ANÁLISIS COMPLETADO EN TIEMPO REAL: ${datos.length} PACIENTES.`, 'exito');
+                const [resPacientes, resOcupacion] = await Promise.all([
+                    fetch(`${urlPacientes}?select=*`, { method: 'GET', headers: cabeceras }),
+                    fetch(`${urlOcupacion}?select=*`, { method: 'GET', headers: cabeceras })
+                ]);
+
+                if (!resPacientes.ok || !resOcupacion.ok) throw new Error("FALLO EN LA COMUNICACIÓN CON SUPABASE.");
+
+                const datosPacientes = await resPacientes.json();
+                const datosOcupacion = await resOcupacion.json();
+
+                procesarYRenderizarTodo(datosPacientes, datosOcupacion);
+                actualizarBanner("✅ ¡ÉXITO! BASES DE DATOS CRUZADAS EN TIEMPO REAL.", "exito");
             } catch (err) {
-                actualizarBanner(`❌ ERROR: ${err.message}`, 'error');
+                actualizarBanner(`❌ ERROR: ${err.message}`, "error");
             }
         }
 
-        function procesarYRenderizar(datos) {
-            let estadosCount = {
-                'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0
-            };
+        function calcularTendencia(data) {
+            let n = data.length;
+            if (n === 0) return [];
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            for (let i = 0; i < n; i++) {
+                sumX += i; sumY += parseFloat(data[i]);
+                sumXY += i * parseFloat(data[i]); sumXX += i * i;
+            }
+            let pendiente = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            let intercepto = (sumY - pendiente * sumX) / n;
+            return data.map((_, i) => (pendiente * i + intercepto).toFixed(1));
+        }
+
+        function procesarYRenderizarTodo(pacientes, ocupacion) {
             
-            let triageCount = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
-            let sumaTriage = 0; let pacientesConTriage = 0;
-            let especialidades = {};
-            let barreras = { 'Sin Barrera': 0, 'Barrera Clínica': 0, 'Barrera Administrativa': 0 };
-            
-            let mapaIps = {};
-            let mapaEps = {}; 
-            
-            let estancias = {
-                'Pendiente': { sum: 0, count: 0 },
-                'En trámite': { sum: 0, count: 0 },
-                'Autorizado sigue en IPS': { sum: 0, count: 0 },
-                'Desescalado': { sum: 0, count: 0 }
-            };
+            // ==========================================
+            // 1. LÓGICA PANEL GENERAL
+            // ==========================================
+            let evolucionTotalDias = {}; 
+            let snapshotUltimoDia = {}; 
+            let ipsAlertaRoja = 0;
+            let sumCensoGlobal = 0; let sumCapGlobal = 0; let sumSobreGlobal = 0;
 
-            datos.forEach(p => {
-                let est = p.estado_gestion || 'Pendiente';
-                if (estadosCount[est] !== undefined) estadosCount[est]++;
+            let fechasReportadas = [...new Set(ocupacion.map(o => o.fecha_reporte))].sort();
+            fechaUltimoReporteGlobal = fechasReportadas[fechasReportadas.length - 1];
 
-                // Triage
-                if (p.triage) {
-                    let trgNum = p.triage.toString();
-                    if (triageCount[trgNum] !== undefined) {
-                        triageCount[trgNum]++;
-                        sumaTriage += parseInt(p.triage);
-                        pacientesConTriage++;
-                    }
-                }
+            ocupacion.forEach(o => {
+                let f = o.fecha_reporte;
+                if (!evolucionTotalDias[f]) evolucionTotalDias[f] = { cap: 0, pac: 0 };
+                evolucionTotalDias[f].cap += o.capacidad_instalada;
+                evolucionTotalDias[f].pac += o.pacientes_actuales;
 
-                // Especialidades
-                let esp = p.especialidad_nivel || 'NO ESPECIFICADA';
-                especialidades[esp] = (especialidades[esp] || 0) + 1;
-
-                // Barreras
-                let bar = p.tipo_barrera || 'Sin Barrera';
-                if (bar === 'Barrera Administrative') bar = 'Barrera Administrativa';
-                if (barreras[bar] !== undefined) barreras[bar]++;
-
-                // IPS
-                let ips = p.ips_actual || 'NO ESPECIFICADA';
-                if (!mapaIps[ips]) {
-                    mapaIps[ips] = { nombre: ips, 'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0, 'Total': 0 };
-                }
-                if (mapaIps[ips][est] !== undefined) mapaIps[ips][est]++;
-                mapaIps[ips]['Total']++;
-
-                // EPS
-                let eps = p.eps || 'NO ESPECIFICADA';
-                if (!mapaEps[eps]) {
-                    mapaEps[eps] = { nombre: eps, 'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0, 'Total': 0 };
-                }
-                if (mapaEps[eps][est] !== undefined) mapaEps[eps][est]++;
-                mapaEps[eps]['Total']++;
-
-                // Estancia
-                let horas = p.tiempo_estancia_horas ? Number(p.tiempo_estancia_horas) : 0;
-                if (estancias[est] !== undefined) {
-                    estancias[est].sum += horas;
-                    estancias[est].count++;
+                if (f === fechaUltimoReporteGlobal) {
+                    snapshotUltimoDia[o.ips_nombre] = o;
+                    let capLocal = Number(o.capacidad_instalada) || 1;
+                    let censoLocal = Number(o.pacientes_actuales) || 0;
+                    let sobreLocal = censoLocal > capLocal ? censoLocal - capLocal : 0;
+                    if ((censoLocal / capLocal) * 100 > 150) ipsAlertaRoja++;
+                    
+                    sumCapGlobal += capLocal; sumCensoGlobal += censoLocal; sumSobreGlobal += sobreLocal;
                 }
             });
 
-            // Preparar arreglos globales para las tablas
-            datosTablaIps = Object.values(mapaIps);
-            datosTablaEps = Object.values(mapaEps);
+            document.getElementById('kpi-promedio-red').innerText = sumCapGlobal > 0 ? ((sumCensoGlobal / sumCapGlobal) * 100).toFixed(1) + "%" : "0%";
+            document.getElementById('kpi-ips-alerta').innerText = ipsAlertaRoja;
+            document.getElementById('kpi-total-sobre').innerText = sumSobreGlobal;
 
-            // Rellenar KPIs
+            let dataTotalEvolucion = fechasReportadas.map(f => ((evolucionTotalDias[f].pac / evolucionTotalDias[f].cap) * 100).toFixed(1));
+            let tendenciaTotal = calcularTendencia(dataTotalEvolucion);
+
+            dibujaGraf('chartEvolucionTotal', {
+                type: 'line',
+                data: {
+                    labels: fechasReportadas.map(f => f.substring(5)), 
+                    datasets: [
+                        { label: 'Ocupación %', data: dataTotalEvolucion, borderColor: '#1e293b', backgroundColor: 'rgba(30,41,59,0.1)', fill: true, tension: 0.1, borderWidth: 3, datalabels: { display: true, color: '#1e293b', align: 'top', font: { weight: 'bold', size: 10 }, formatter: (v) => v + '%' } },
+                        { label: 'Tendencia', data: tendenciaTotal, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, datalabels: { display: false } }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { stepSize: 10 } } } }
+            });
+
+            let complejidadAcumulada = { 'Alta Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Mediana Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Baja Complejidad': { cap: 0, sobre: 0, disp: 0 } };
+            Object.values(snapshotUltimoDia).forEach(o => {
+                let c = o.nivel_complejidad;
+                if (complejidadAcumulada[c]) {
+                    let cap = Number(o.capacidad_instalada) || 1; let censo = Number(o.pacientes_actuales) || 0;
+                    complejidadAcumulada[c].cap += cap;
+                    complejidadAcumulada[c].sobre += (censo > cap ? censo - cap : 0);
+                    complejidadAcumulada[c].disp += (censo < cap ? cap - censo : 0);
+                }
+            });
+
+            let cats = ['Alta Complejidad', 'Mediana Complejidad', 'Baja Complejidad'];
+            dibujaGraf('chartColumnasApiladas', {
+                type: 'bar',
+                data: {
+                    labels: cats,
+                    datasets: [
+                        { label: 'Capacidad Instalada', data: cats.map(c => complejidadAcumulada[c].cap), backgroundColor: '#3b82f6' },
+                        { label: 'Sobreocupación', data: cats.map(c => complejidadAcumulada[c].sobre), backgroundColor: '#ef4444' },
+                        { label: 'Disponibilidad', data: cats.map(c => complejidadAcumulada[c].disp), backgroundColor: '#10b981' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true, color: '#ffffff', font: { weight: 'bold' }, formatter: (v) => v > 0 ? v : '' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+            });
+
+            document.getElementById('kpi-pacientes-auditoria').innerText = pacientes.length;
+            let auditoriaPorIps = {};
+            pacientes.forEach(p => {
+                let ips = p.ips_actual;
+                if (!auditoriaPorIps[ips]) auditoriaPorIps[ips] = { total: 0, pendientes: 0 };
+                auditoriaPorIps[ips].total++;
+                if (p.estado_gestion === 'Pendiente' || p.estado_gestion === 'En trámite') auditoriaPorIps[ips].pendientes++;
+            });
+
+            datosMatrizOriginal = [];
+            let ipsSobreocupacion = [];
+            let comparativaArray = []; 
+
+            Object.entries(snapshotUltimoDia).forEach(([ipsNombre, o]) => {
+                let auditoriaMatch = { total: 0, pendientes: 0 };
+                Object.keys(auditoriaPorIps).forEach(key => {
+                    if (ipsNombre.toLowerCase() === key.toLowerCase() || ipsNombre.toLowerCase().includes(key.toLowerCase())) auditoriaMatch = auditoriaPorIps[key];
+                });
+
+                let cap = Number(o.capacidad_instalada) || 1; let censo = Number(o.pacientes_actuales) || 0;
+                let sobre = censo > cap ? censo - cap : 0; let pct = parseFloat(((censo / cap) * 100).toFixed(1));
+
+                if (sobre > 0) ipsSobreocupacion.push({ ips: ipsNombre.substring(0, 15), valor: sobre });
+                if (auditoriaMatch.total > 0 || pct > 130) comparativaArray.push({ ips: ipsNombre.substring(0, 15), ocupacion: pct, pendientes: auditoriaMatch.pendientes });
+
+                datosMatrizOriginal.push({ ips: ipsNombre, complejidad: o.nivel_complejidad, capacidad: cap, censo: censo, sobreocupacion: sobre, porcentaje: pct, auditoria_total: auditoriaMatch.total, auditoria_pend: auditoriaMatch.pendientes });
+            });
+
+            comparativaArray.sort((a, b) => b.ocupacion - a.ocupacion);
+            dibujaGraf('chartComparativoAuditoriaSaturacion', {
+                type: 'bar',
+                data: {
+                    labels: comparativaArray.map(d => d.ips),
+                    datasets: [
+                        { label: 'Ocupación IPS %', data: comparativaArray.map(d => d.ocupacion), backgroundColor: comparativaArray.map(d => d.ocupacion > 150 ? '#ef4444' : (d.ocupacion > 100 ? '#f59e0b' : '#10b981')), yAxisID: 'yOcupacion' },
+                        { label: 'Pacientes Pend. Gestión', data: comparativaArray.map(d => d.pendientes), backgroundColor: '#2563eb', yAxisID: 'yAuditoria', barPercentage: 0.5 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { yOcupacion: { type: 'linear', position: 'left', ticks: { stepSize: 20 } }, yAuditoria: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } } } }
+            });
+
+            ipsSobreocupacion.sort((a,b) => b.valor - a.valor);
+            dibujaGraf('chartTopSobreocupacion', {
+                type: 'bar',
+                data: { labels: ipsSobreocupacion.slice(0, 5).map(i => i.ips), datasets: [{ label: 'Pacientes Extras', data: ipsSobreocupacion.slice(0, 5).map(i => i.valor), backgroundColor: '#ef4444', borderRadius: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true, color: '#ffffff', font: { weight: 'bold' } } } }
+            });
+
+            datosMatrizActual = [...datosMatrizOriginal];
+            renderizarMatrizGral();
+
+
+            // ==========================================
+            // 2. LÓGICA PANEL DE ANALÍTICA (Pacientes)
+            // ==========================================
+            let estadosCount = { 'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0 };
+            let triageCount = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+            let sumaTriage = 0; let pctTriage = 0;
+            let especialidades = {}; let barreras = { 'Sin Barrera': 0, 'Barrera Clínica': 0, 'Barrera Administrativa': 0 };
+            let mapaIps = {}; let mapaEps = {}; 
+            let estancias = { 'Pendiente': { sum: 0, count: 0 }, 'En trámite': { sum: 0, count: 0 }, 'Autorizado sigue en IPS': { sum: 0, count: 0 }, 'Desescalado': { sum: 0, count: 0 } };
+
+            pacientes.forEach(p => {
+                let est = p.estado_gestion || 'Pendiente';
+                if (estadosCount[est] !== undefined) estadosCount[est]++;
+
+                if (p.triage) { let trg = p.triage.toString(); if (triageCount[trg] !== undefined) { triageCount[trg]++; sumaTriage += parseInt(trg); pctTriage++; } }
+
+                let esp = p.especialidad_nivel || 'NO ESPECIFICADA'; especialidades[esp] = (especialidades[esp] || 0) + 1;
+                
+                let bar = p.tipo_barrera || 'Sin Barrera'; if (bar === 'Barrera Administrative') bar = 'Barrera Administrativa';
+                if (barreras[bar] !== undefined) barreras[bar]++;
+
+                let ips = p.ips_actual || 'NO ESPECIFICADA';
+                if (!mapaIps[ips]) mapaIps[ips] = { nombre: ips, 'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0, 'Total': 0 };
+                if (mapaIps[ips][est] !== undefined) mapaIps[ips][est]++;
+                mapaIps[ips]['Total']++;
+
+                let eps = p.eps || 'NO ESPECIFICADA';
+                if (!mapaEps[eps]) mapaEps[eps] = { nombre: eps, 'Pendiente': 0, 'En trámite': 0, 'Autorizado sigue en IPS': 0, 'Desescalado': 0, 'Total': 0 };
+                if (mapaEps[eps][est] !== undefined) mapaEps[eps][est]++;
+                mapaEps[eps]['Total']++;
+
+                let horas = p.tiempo_estancia_horas ? Number(p.tiempo_estancia_horas) : 0;
+                if (estancias[est] !== undefined) { estancias[est].sum += horas; estancias[est].count++; }
+            });
+
+            document.getElementById('kpi-casos-pendientes-gral').innerText = estadosCount['Pendiente'] + estadosCount['En trámite'];
             document.getElementById('kpi-pendiente').innerText = estadosCount['Pendiente'];
             document.getElementById('kpi-tramite').innerText = estadosCount['En trámite'];
             document.getElementById('kpi-autorizado-ips').innerText = estadosCount['Autorizado sigue en IPS'];
             document.getElementById('kpi-desescalado').innerText = estadosCount['Desescalado'];
-            document.getElementById('kpi-promedio-triage').innerText = pacientesConTriage > 0 ? (sumaTriage / pacientesConTriage).toFixed(1) : "0.0";
+            document.getElementById('kpi-promedio-triage').innerText = pctTriage > 0 ? (sumaTriage / pctTriage).toFixed(1) : "0.0";
 
-            // GRÁFICAS ORDENADAS DE MAYOR A MENOR
+            datosTablaIps = Object.values(mapaIps);
+            datosTablaEps = Object.values(mapaEps);
 
-            // 1. Tiempos de Estancia
+            // Gráficas Analítica
             let estArr = [
                 { label: 'PENDIENTES', val: estancias['Pendiente'].count > 0 ? Math.round(estancias['Pendiente'].sum / estancias['Pendiente'].count) : 0, color: '#ef4444' },
                 { label: 'EN TRÁMITE', val: estancias['En trámite'].count > 0 ? Math.round(estancias['En trámite'].sum / estancias['En trámite'].count) : 0, color: '#f59e0b' },
                 { label: 'AUTORIZADO IPS', val: estancias['Autorizado sigue en IPS'].count > 0 ? Math.round(estancias['Autorizado sigue en IPS'].sum / estancias['Autorizado sigue en IPS'].count) : 0, color: '#a855f7' },
                 { label: 'DESESCALADOS', val: estancias['Desescalado'].count > 0 ? Math.round(estancias['Desescalado'].sum / estancias['Desescalado'].count) : 0, color: '#10b981' }
-            ];
-            estArr.sort((a, b) => b.val - a.val); 
-            
-            dibujaGraf('chartTiemposEstancia', {
-                type: 'bar',
-                data: {
-                    labels: estArr.map(e => e.label),
-                    datasets: [{
-                        label: 'Horas Promedio', data: estArr.map(e => e.val), backgroundColor: estArr.map(e => e.color), borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, datalabels: { align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' }, formatter: (v) => v + 'h' } },
-                    scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } }
-                }
-            });
+            ].sort((a, b) => b.val - a.val); 
+            dibujaGraf('chartTiemposEstancia', { type: 'bar', data: { labels: estArr.map(e => e.label), datasets: [{ data: estArr.map(e => e.val), backgroundColor: estArr.map(e => e.color), borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' }, formatter: (v) => v + 'h' } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } } });
 
-            // 2. Efectividad IPS
-            let topIPS = [...datosTablaIps].sort((a,b) => b['Total'] - a['Total']).slice(0, 5);
-            let labelsIPS = topIPS.map(i => i.nombre.substring(0, 15) + (i.nombre.length > 15 ? '...' : ''));
-            let dataResueltos = topIPS.map(i => i['Desescalado'] + i['Autorizado sigue en IPS']);
-            let dataProceso = topIPS.map(i => i['En trámite']);
-            let dataPendientes = topIPS.map(i => i['Pendiente']);
+            let topIpsAud = [...datosTablaIps].sort((a,b) => b['Total'] - a['Total']).slice(0, 5);
+            dibujaGraf('chartEfectividadIPS', { type: 'bar', data: { labels: topIpsAud.map(i => i.nombre.substring(0, 15)), datasets: [ { label: 'AUT/DESESC.', data: topIpsAud.map(i => i['Desescalado'] + i['Autorizado sigue en IPS']), backgroundColor: '#10b981' }, { label: 'PROCESO', data: topIpsAud.map(i => i['En trámite']), backgroundColor: '#f59e0b' }, { label: 'PENDIENTES', data: topIpsAud.map(i => i['Pendiente']), backgroundColor: '#ef4444' } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 10, font: {size: 9} } }, datalabels: { display: true, color: '#fff', font: { weight: 'bold', size: 9 }, formatter: (v) => v > 0 ? v : '' } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true } } } });
 
-            dibujaGraf('chartEfectividadIPS', {
-                type: 'bar',
-                data: {
-                    labels: labelsIPS,
-                    datasets: [
-                        { label: 'AUTORIZADO/DESESC.', data: dataResueltos, backgroundColor: '#10b981' },
-                        { label: 'EN PROCESO', data: dataProceso, backgroundColor: '#f59e0b' },
-                        { label: 'PENDIENTES', data: dataPendientes, backgroundColor: '#ef4444' }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', labels: { boxWidth: 10, font: {size: 9} } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 9 }, formatter: (v) => v > 0 ? v : '' } },
-                    scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { borderDash: [4, 4] } } }
-                }
-            });
+            let estCountArr = [ { label: 'PENDIENTE', val: estadosCount['Pendiente'], color: '#ef4444' }, { label: 'EN TRÁMITE', val: estadosCount['En trámite'], color: '#f59e0b' }, { label: 'AUT. IPS', val: estadosCount['Autorizado sigue en IPS'], color: '#a855f7' }, { label: 'DESESCALADO', val: estadosCount['Desescalado'], color: '#10b981' } ].sort((a,b) => b.val - a.val);
+            dibujaGraf('chartEstados', { type: 'doughnut', data: { labels: estCountArr.map(e => e.label), datasets: [{ data: estCountArr.map(e => e.val), backgroundColor: estCountArr.map(e => e.color) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6 } }, datalabels: { display: true, color: '#fff', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } } } });
 
-            // 3. Estados
-            let estCountArr = [
-                { label: 'PENDIENTE', val: estadosCount['Pendiente'], color: '#ef4444' },
-                { label: 'EN TRÁMITE', val: estadosCount['En trámite'], color: '#f59e0b' },
-                { label: 'AUT. IPS', val: estadosCount['Autorizado sigue en IPS'], color: '#a855f7' },
-                { label: 'DESESCALADO', val: estadosCount['Desescalado'], color: '#10b981' }
-            ];
-            estCountArr.sort((a,b) => b.val - a.val);
-
-            dibujaGraf('chartEstados', {
-                type: 'doughnut',
-                data: {
-                    labels: estCountArr.map(e => e.label),
-                    datasets: [{ data: estCountArr.map(e => e.val), backgroundColor: estCountArr.map(e => e.color) }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6 } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } }
-                }
-            });
-
-            // 4. Especialidades
             let dEsp = Object.entries(especialidades).sort((a,b) => b[1] - a[1]).slice(0, 6);
-            dibujaGraf('chartEspecialidad', {
-                type: 'bar',
-                data: {
-                    labels: dEsp.map(e => e[0].substring(0, 18)),
-                    datasets: [{ label: 'Casos', data: dEsp.map(e => e[1]), backgroundColor: '#0284c7', borderRadius: 4 }]
-                },
-                options: {
-                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, datalabels: { align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } },
-                    scales: { x: { display: false }, y: { grid: { display: false } } }
-                }
+            dibujaGraf('chartEspecialidad', { type: 'bar', data: { labels: dEsp.map(e => e[0].substring(0, 18)), datasets: [{ data: dEsp.map(e => e[1]), backgroundColor: '#0284c7', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } }, scales: { x: { display: false }, y: { grid: { display: false } } } } });
+
+            let trgArr = [ { label: 'TRIAGE 1', val: triageCount['1'], color: '#dc2626' }, { label: 'TRIAGE 2', val: triageCount['2'], color: '#ea580c' }, { label: 'TRIAGE 3', val: triageCount['3'], color: '#eab308' }, { label: 'TRIAGE 4', val: triageCount['4'], color: '#2563eb' }, { label: 'TRIAGE 5', val: triageCount['5'], color: '#16a34a' } ].sort((a,b) => b.val - a.val);
+            dibujaGraf('chartTriageDistribucion', { type: 'bar', data: { labels: trgArr.map(e => e.label), datasets: [{ data: trgArr.map(e => e.val), backgroundColor: trgArr.map(e => e.color), borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } }, scales: { x: { grid: { display: false } }, y: { display: false, beginAtZero: true } } } });
+
+            let barArr = [ { label: 'SIN BARRERA', val: barreras['Sin Barrera'], color: '#06b6d4' }, { label: 'B. CLÍNICA', val: barreras['Barrera Clínica'], color: '#f97316' }, { label: 'B. ADMINISTRATIVA', val: barreras['Barrera Administrativa'], color: '#ec4899' } ].sort((a,b) => b.val - a.val);
+            dibujaGraf('chartBarreras', { type: 'bar', data: { labels: barArr.map(e => e.label), datasets: [{ data: barArr.map(e => e.val), backgroundColor: barArr.map(e => e.color), borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } }, scales: { x: { grid: { display: false } }, y: { display: false, beginAtZero: true } } } });
+
+            renderizarTablasAnalitica();
+
+
+            // ==========================================
+            // 3. LÓGICA PESTAÑA TENDENCIA IPS
+            // ==========================================
+            fechasGlobales = fechasReportadas;
+            let sumaCensoRedPorFecha = {}; let sumaCapRedPorFecha = {};
+            dataPorIps = {};
+
+            fechasGlobales.forEach(f => { sumaCensoRedPorFecha[f] = 0; sumaCapRedPorFecha[f] = 0; });
+            ocupacion.forEach(o => {
+                let f = o.fecha_reporte; let ips = o.ips_nombre;
+                sumaCensoRedPorFecha[f] += (Number(o.pacientes_actuales) || 0);
+                sumaCapRedPorFecha[f] += (Number(o.capacidad_instalada) || 0);
+                if (!dataPorIps[ips]) dataPorIps[ips] = {};
+                dataPorIps[ips][f] = { pct: o.porcentaje_ocupacion, cap: o.capacidad_instalada, censo: o.pacientes_actuales };
             });
 
-            // 5. Triage
-            let trgArr = [
-                { label: 'TRIAGE 1', val: triageCount['1'], color: '#dc2626' },
-                { label: 'TRIAGE 2', val: triageCount['2'], color: '#ea580c' },
-                { label: 'TRIAGE 3', val: triageCount['3'], color: '#eab308' },
-                { label: 'TRIAGE 4', val: triageCount['4'], color: '#2563eb' },
-                { label: 'TRIAGE 5', val: triageCount['5'], color: '#16a34a' }
-            ];
-            trgArr.sort((a,b) => b.val - a.val);
+            promedioRedPorFecha = {};
+            fechasGlobales.forEach(f => { promedioRedPorFecha[f] = sumaCapRedPorFecha[f] > 0 ? ((sumaCensoRedPorFecha[f] / sumaCapRedPorFecha[f]) * 100).toFixed(1) : null; });
 
-            dibujaGraf('chartTriageDistribucion', {
-                type: 'bar',
-                data: {
-                    labels: trgArr.map(e => e.label),
-                    datasets: [{ data: trgArr.map(e => e.val), backgroundColor: trgArr.map(e => e.color), borderRadius: 4 }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, datalabels: { align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } },
-                    scales: { x: { grid: { display: false } }, y: { display: false, beginAtZero: true } }
-                }
-            });
-
-            // 6. Barreras
-            let barArr = [
-                { label: 'SIN BARRERA', val: barreras['Sin Barrera'], color: '#06b6d4' },
-                { label: 'B. CLÍNICA', val: barreras['Barrera Clínica'], color: '#f97316' },
-                { label: 'B. ADMINISTRATIVA', val: barreras['Barrera Administrativa'], color: '#ec4899' }
-            ];
-            barArr.sort((a,b) => b.val - a.val);
-
-            dibujaGraf('chartBarreras', {
-                type: 'bar',
-                data: {
-                    labels: barArr.map(e => e.label),
-                    datasets: [{ data: barArr.map(e => e.val), backgroundColor: barArr.map(e => e.color), borderRadius: 4 }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, datalabels: { align: 'end', anchor: 'end', color: '#1e293b', font: { weight: 'bold' } } },
-                    scales: { x: { grid: { display: false } }, y: { display: false, beginAtZero: true } }
-                }
-            });
-
-            renderizarTablas();
+            const selector = document.getElementById('selector-ips');
+            selector.innerHTML = '<option value="" disabled selected>SELECCIONE UNA IPS DE LA LISTA...</option>';
+            Object.keys(dataPorIps).sort().forEach(ips => selector.innerHTML += `<option value="${ips}">${ips}</option>`);
         }
 
-        // --- SISTEMA DE ORDENAMIENTO Y BÚSQUEDA EN TABLAS ---
-        function ordenarMatriz(tipo, columna) {
-            if (tipo === 'ips') {
-                if (sortColIps === columna) sortAscIps = !sortAscIps;
-                else { sortColIps = columna; sortAscIps = false; }
-            } else {
-                if (sortColEps === columna) sortAscEps = !sortAscEps;
-                else { sortColEps = columna; sortAscEps = false; }
-            }
-            renderizarTablas();
+
+        // ================== FUNCIONES TABLA GENERAL ==================
+        function filtrarYRenderizarMatrizGral() {
+            const texto = document.getElementById('buscador-matriz-gral').value.toLowerCase();
+            datosMatrizActual = datosMatrizOriginal.filter(r => r.ips.toLowerCase().includes(texto) || r.complejidad.toLowerCase().includes(texto));
+            if(columnaOrdenActual) ordenarArrayGral(columnaOrdenActual, false);
+            renderizarMatrizGral();
         }
 
-        function renderizarTablas() {
-            const buscador = document.getElementById('buscador-matrices').value.toLowerCase();
-            
-            // 1. Filtrar
+        function ordenarMatrizGral(columna) {
+            if (columnaOrdenActual === columna) ordenAscendente = !ordenAscendente; else { columnaOrdenActual = columna; ordenAscendente = false; }
+            ordenarArrayGral(columna, true);
+            renderizarMatrizGral();
+            document.querySelectorAll('#panel-general th.th-sortable').forEach(th => th.classList.remove('sort-active'));
+            let activeTh = document.querySelector(`#panel-general th[onclick="ordenarMatrizGral('${columna}')"]`);
+            if(activeTh) { activeTh.classList.add('sort-active'); activeTh.querySelector('.sort-icon').innerText = ordenAscendente ? '▲' : '▼'; }
+        }
+
+        function ordenarArrayGral(columna) {
+            datosMatrizActual.sort((a, b) => {
+                let valA = a[columna]; let valB = b[columna];
+                if (typeof valA === 'string') return ordenAscendente ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                return ordenAscendente ? (valA - valB) : (valB - valA);
+            });
+        }
+
+        function renderizarMatrizGral() {
+            const tbody = document.getElementById('tabla-maestra-cuerpo');
+            tbody.innerHTML = '';
+            datosMatrizActual.forEach(r => {
+                let badgeClase = r.porcentaje > 150 ? 'text-red-700 bg-red-100 font-bold' : (r.porcentaje > 100 ? 'text-amber-700 bg-amber-100 font-semibold' : 'text-emerald-700 bg-emerald-100');
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="p-3 font-semibold text-slate-900">${r.ips}</td>
+                        <td class="p-3 text-slate-500 text-[11px] font-medium">${r.complejidad}</td>
+                        <td class="p-3 text-center text-slate-600 font-mono">${r.capacidad}</td>
+                        <td class="p-3 text-center text-slate-600 font-mono">${r.censo}</td>
+                        <td class="p-3 text-center text-red-600 font-mono">${r.sobreocupacion}</td>
+                        <td class="p-3 text-center"><span class="px-2.5 py-1 rounded text-xs ${badgeClase}">${r.porcentaje}%</span></td>
+                        <td class="p-3 text-center text-blue-700 font-bold bg-blue-50/20">${r.auditoria_total}</td>
+                        <td class="p-3 text-center text-red-600 font-bold bg-red-50/20">${r.auditoria_pend}</td>
+                    </tr>`;
+            });
+        }
+
+
+        // ================== FUNCIONES TABLAS ANALÍTICA ==================
+        function ordenarTablasAnalitica(tipo, columna) {
+            if (tipo === 'ips') { if (sortColIps === columna) sortAscIps = !sortAscIps; else { sortColIps = columna; sortAscIps = false; } } 
+            else { if (sortColEps === columna) sortAscEps = !sortAscEps; else { sortColEps = columna; sortAscEps = false; } }
+            renderizarTablasAnalitica();
+        }
+
+        function renderizarTablasAnalitica() {
+            const buscador = document.getElementById('buscador-matrices-analitica').value.toLowerCase();
             let ipsFiltrada = datosTablaIps.filter(d => d.nombre.toLowerCase().includes(buscador));
             let epsFiltrada = datosTablaEps.filter(d => d.nombre.toLowerCase().includes(buscador));
 
-            // 2. Ordenar IPS
-            ipsFiltrada.sort((a, b) => {
-                let valA = a[sortColIps]; let valB = b[sortColIps];
-                if (typeof valA === 'string') return sortAscIps ? valA.localeCompare(valB) : valB.localeCompare(valA);
-                return sortAscIps ? valA - valB : valB - valA;
-            });
+            ipsFiltrada.sort((a, b) => { let vA = a[sortColIps]; let vB = b[sortColIps]; if (typeof vA === 'string') return sortAscIps ? vA.localeCompare(vB) : vB.localeCompare(vA); return sortAscIps ? vA - vB : vB - vA; });
+            epsFiltrada.sort((a, b) => { let vA = a[sortColEps]; let vB = b[sortColEps]; if (typeof vA === 'string') return sortAscEps ? vA.localeCompare(vB) : vB.localeCompare(vA); return sortAscEps ? vA - vB : vB - vA; });
 
-            // 3. Ordenar EPS
-            epsFiltrada.sort((a, b) => {
-                let valA = a[sortColEps]; let valB = b[sortColEps];
-                if (typeof valA === 'string') return sortAscEps ? valA.localeCompare(valB) : valB.localeCompare(valA);
-                return sortAscEps ? valA - valB : valB - valA;
-            });
-
-            // 4. Renderizar IPS
-            const tbodyIps = document.getElementById('tabla-ips-cuerpo');
-            tbodyIps.innerHTML = '';
+            const tbodyIps = document.getElementById('tabla-ips-cuerpo'); tbodyIps.innerHTML = '';
             ipsFiltrada.forEach(d => {
-                tbodyIps.innerHTML += `
-                    <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                        <td class="p-3 font-semibold text-slate-800 whitespace-nowrap">${d.nombre}</td>
-                        <td class="p-3 text-center font-bold text-red-600 bg-red-50/40">${d['Pendiente']}</td>
-                        <td class="p-3 text-center font-semibold text-amber-600">${d['En trámite']}</td>
-                        <td class="p-3 text-center font-semibold text-purple-600">${d['Autorizado sigue en IPS']}</td>
-                        <td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/40">${d['Desescalado']}</td>
-                        <td class="p-3 text-center font-bold bg-slate-100 text-slate-800">${d['Total']}</td>
-                    </tr>`;
+                tbodyIps.innerHTML += `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="p-3 font-semibold text-slate-800 whitespace-nowrap">${d.nombre}</td><td class="p-3 text-center font-bold text-red-600 bg-red-50/40">${d['Pendiente']}</td><td class="p-3 text-center font-semibold text-amber-600">${d['En trámite']}</td><td class="p-3 text-center font-semibold text-purple-600">${d['Autorizado sigue en IPS']}</td><td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/40">${d['Desescalado']}</td><td class="p-3 text-center font-bold bg-slate-100">${d['Total']}</td></tr>`;
             });
 
-            // 5. Renderizar EPS
-            const tbodyEps = document.getElementById('tabla-eps-cuerpo');
-            tbodyEps.innerHTML = '';
+            const tbodyEps = document.getElementById('tabla-eps-cuerpo'); tbodyEps.innerHTML = '';
             epsFiltrada.forEach(d => {
-                tbodyEps.innerHTML += `
-                    <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                        <td class="p-3 font-semibold text-slate-800 whitespace-nowrap">${d.nombre}</td>
-                        <td class="p-3 text-center font-bold text-red-600 bg-red-50/40">${d['Pendiente']}</td>
-                        <td class="p-3 text-center font-semibold text-amber-600">${d['En trámite']}</td>
-                        <td class="p-3 text-center font-semibold text-purple-600">${d['Autorizado sigue en IPS']}</td>
-                        <td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/40">${d['Desescalado']}</td>
-                        <td class="p-3 text-center font-bold bg-slate-100 text-slate-800">${d['Total']}</td>
-                    </tr>`;
+                tbodyEps.innerHTML += `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="p-3 font-semibold text-slate-800 whitespace-nowrap">${d.nombre}</td><td class="p-3 text-center font-bold text-red-600 bg-red-50/40">${d['Pendiente']}</td><td class="p-3 text-center font-semibold text-amber-600">${d['En trámite']}</td><td class="p-3 text-center font-semibold text-purple-600">${d['Autorizado sigue en IPS']}</td><td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/40">${d['Desescalado']}</td><td class="p-3 text-center font-bold bg-slate-100">${d['Total']}</td></tr>`;
             });
         }
 
-        function dibujaGraf(idCanvas, config) {
-            if (instanciasGraficas[idCanvas]) {
-                instanciasGraficas[idCanvas].destroy();
-            }
-            const ctx = document.getElementById(idCanvas).getContext('2d');
-            instanciasGraficas[idCanvas] = new Chart(ctx, config);
+
+        // ================== FUNCIONES TENDENCIA IPS ==================
+        function renderizarGraficaIps() {
+            const ipsSel = document.getElementById('selector-ips').value;
+            if (!ipsSel) return;
+
+            document.getElementById('titulo-grafica-ips').innerText = `📈 CURVA DE COMPORTAMIENTO: ${ipsSel}`;
+            let dataLineaIps = []; let dataLineaRed = []; let dataAlerta = [];
+            let sumHist = 0; let countHist = 0; let maxHist = 0; let currentOc = 0;
+
+            fechasGlobales.forEach(f => {
+                let valObj = dataPorIps[ipsSel][f];
+                let valIps = valObj !== undefined ? valObj.pct : null;
+                dataLineaIps.push(valIps); dataLineaRed.push(promedioRedPorFecha[f]); dataAlerta.push(100); 
+
+                if (valIps !== null) { sumHist += valIps; countHist++; if (valIps > maxHist) maxHist = valIps; currentOc = valIps; }
+            });
+
+            document.getElementById('kpi-actual').innerText = (currentOc > 0 ? currentOc.toFixed(1) : 0) + '%';
+            document.getElementById('kpi-maximo').innerText = (maxHist > 0 ? maxHist.toFixed(1) : 0) + '%';
+            document.getElementById('kpi-promedio').innerText = (countHist > 0 ? (sumHist / countHist).toFixed(1) : 0) + '%';
+
+            dibujaGraf('chartEvolucionIps', {
+                type: 'line',
+                data: {
+                    labels: fechasGlobales.map(f => f.substring(5)),
+                    datasets: [
+                        { label: `Ocupación IPS`, data: dataLineaIps, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.3, borderWidth: 3, pointRadius: 3, spanGaps: true, datalabels: { display: false } },
+                        { label: 'Promedio Red Distrital', data: dataLineaRed, borderColor: '#94a3b8', borderDash: [4, 4], borderWidth: 2, pointRadius: 0, fill: false, spanGaps: true, datalabels: { display: false } },
+                        { label: 'Límite Alerta (100%)', data: dataAlerta, borderColor: '#ef4444', borderWidth: 1.5, pointRadius: 0, fill: false, datalabels: { display: false } }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { weight: 'bold' } } },
+                        tooltip: { callbacks: { label: function(c) { 
+                            if (c.datasetIndex === 0) {
+                                let f = fechasGlobales[c.dataIndex]; let d = dataPorIps[ipsSel][f];
+                                if (d) return [`Ocupación: ${c.parsed.y}%`, `Censo actual: ${d.censo}`, `Capacidad habilitada: ${d.cap} camas`];
+                            }
+                            return c.dataset.label + ': ' + c.parsed.y + '%'; 
+                        } } }
+                    },
+                    scales: { y: { beginAtZero: true, suggestedMax: 150, title: { display: true, text: '% OCUPACIÓN', font: { weight: 'bold' } } }, x: { grid: { display: false } } }
+                }
+            });
         }
 
-        document.addEventListener('DOMContentLoaded', cargarDatos);
+
+        // ================== UTILIDADES ==================
+        function dibujaGraf(id, config) {
+            if (instanciasGraficas[id]) instanciasGraficas[id].destroy();
+            instanciasGraficas[id] = new Chart(document.getElementById(id).getContext('2d'), config);
+        }
+
+        function exportarInformePDF() {
+            if (datosMatrizActual.length === 0) return alert("NO HAY DATOS PARA EXPORTAR.");
+            const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); 
+            doc.setFontSize(16); doc.setTextColor(30, 58, 138); doc.text("INFORME EJECUTIVO: AUDITORÍA Y SATURACIÓN", 14, 15);
+            doc.setFontSize(10); doc.setTextColor(100); doc.text(`CORTE: ${fechaUltimoReporteGlobal} | GENERADO EL: ${new Date().toLocaleDateString()}`, 14, 22);
+            doc.autoTable({
+                startY: 28, head: [['IPS', 'COMPLEJIDAD', 'CAPACIDAD', 'CENSO', 'SOBREOCUPACIÓN', 'OCUPACIÓN %', 'CASOS AUD.', 'PENDIENTES EPS']],
+                body: datosMatrizActual.map(r => [r.ips, r.complejidad, r.capacidad.toString(), r.censo.toString(), r.sobreocupacion.toString(), r.porcentaje.toString() + '%', r.auditoria_total.toString(), r.auditoria_pend.toString()]),
+                styles: { fontSize: 8 }, headStyles: { fillColor: [30, 58, 138] }
+            });
+            doc.save(`Informe_${fechaUltimoReporteGlobal}.pdf`);
+        }
+
+        document.addEventListener('DOMContentLoaded', cargarTodoElSistema);
     </script>
 </body>
 </html>
