@@ -21,13 +21,12 @@
         .kpi-value { font-size: 1.875rem; font-weight: 800; color: #0f172a; line-height: 1; }
         .chart-container { position: relative; height: 280px; width: 100%; }
         
-        /* Controles de Tablas */
         .th-sortable { cursor: pointer; user-select: none; transition: background-color 0.2s; }
         .th-sortable:hover { background-color: rgba(0, 0, 0, 0.05); }
         .sort-icon { font-size: 0.75rem; opacity: 0.5; margin-left: 4px; }
         .sort-active .sort-icon { opacity: 1; color: #60a5fa; }
         
-        .input-field { width: 100%; padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; }
+        .input-field { padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background-color: #ffffff; font-size: 0.875rem; color: #334155; }
         .input-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
 
         ::-webkit-scrollbar { height: 6px; width: 6px; }
@@ -88,14 +87,21 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div class="card">
-                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📈 EVOLUCIÓN OCUPACIÓN TOTAL (INTERVALOS 10% + TENDENCIA)</h2>
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
+                        <h2 class="text-sm font-bold text-slate-800 tracking-wide">📈 EVOLUCIÓN Y PROYECCIÓN (48H)</h2>
+                        <select id="selector-modelo" onchange="renderizarGraficaEvolucionCentral()" class="input-field w-full md:w-auto py-1 text-[10px] font-bold bg-slate-100 text-blue-700 cursor-pointer">
+                            <option value="EMA">MODELO: EMA (EXPONENCIAL)</option>
+                            <option value="SMA">MODELO: SMA (SIMPLE)</option>
+                            <option value="LIN">MODELO: REGRESIÓN LINEAL</option>
+                        </select>
+                    </div>
                     <div class="chart-container">
                         <canvas id="chartEvolucionTotal"></canvas>
                     </div>
                 </div>
                 
                 <div class="card">
-                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📊 CAPACIDAD VS SOBREOCUPACIÓN POR COMPLEJIDAD (ÚLTIMO CORTE)</h2>
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3">📊 CAPACIDAD VS SOBREOCUPACIÓN POR COMPLEJIDAD</h2>
                     <div class="chart-container">
                         <canvas id="chartColumnasApiladas"></canvas>
                     </div>
@@ -125,7 +131,7 @@
                         <p class="text-xs text-slate-500 normal-case">Datos del último día de corte cruzados con la auditoría en tiempo real.</p>
                     </div>
                     <div class="w-full md:w-1/3">
-                        <input type="text" id="buscador-matriz-gral" onkeyup="filtrarYRenderizarMatrizGral()" placeholder="🔍 BUSCAR IPS O COMPLEJIDAD..." class="input-field">
+                        <input type="text" id="buscador-matriz-gral" onkeyup="filtrarYRenderizarMatrizGral()" placeholder="🔍 BUSCAR IPS O COMPLEJIDAD..." class="input-field w-full">
                     </div>
                 </div>
                 
@@ -149,7 +155,6 @@
                 </div>
             </div>
         </div>
-
 
         <div id="panel-analitica" class="hidden">
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
@@ -292,36 +297,35 @@
     </div>
 
     <script>
-        // Endpoints unificados
         const urlPacientes = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/consolidado_pacientes';
         const urlOcupacion = 'https://kbejnuekugoffybtsgfm.supabase.co/rest/v1/ocupacion_urgencias_ips';
         const tokenAnon = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWpudWVrdWdvZmZ5YnRzZ2ZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MDQ4MjUsImV4cCI6MjA5NTM4MDgyNX0.7d9kFfhX4mGXPAGDjZKxg0r3-bB2V2KvdsSzk5Ys_zI';
 
         let instanciasGraficas = {};
 
-        // Variables Panel General
+        // Variables Globales Evolución
+        let globalFechasEvolucion = [];
+        let globalDataEvolucion = [];
+
         let datosMatrizOriginal = [];
         let datosMatrizActual = [];
         let columnaOrdenActual = '';
         let ordenAscendente = true;
         let fechaUltimoReporteGlobal = '';
 
-        // Variables Panel Analítica
         let datosTablaIps = [];
         let datosTablaEps = [];
         let sortColIps = 'Total'; let sortAscIps = false;
         let sortColEps = 'Total'; let sortAscEps = false;
 
-        // Variables Panel Tendencias
         let fechasGlobales = [];
         let promedioRedPorFecha = {};
         let dataPorIps = {};
 
-        // Configuración Global ChartJS
         Chart.register(ChartDataLabels);
         Chart.defaults.font.family = "'Inter', sans-serif";
         Chart.defaults.color = '#64748b';
-        Chart.defaults.plugins.datalabels.display = false; // Por defecto apagado para no saturar gráficas de línea
+        Chart.defaults.plugins.datalabels.display = false; 
 
         function cambiarPestana(pestana) {
             ['panel-general', 'panel-analitica', 'panel-tendencia'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -366,7 +370,35 @@
             }
         }
 
-        function calcularTendencia(data) {
+        // ==========================================
+        // FUNCIONES MATEMÁTICAS PARA TENDENCIAS
+        // ==========================================
+        function calcularEMA(data, periodos = 3) {
+            if (data.length === 0) return [];
+            let k = 2 / (periodos + 1);
+            let emaArray = [parseFloat(data[0])]; 
+            for (let i = 1; i < data.length; i++) {
+                let valorActual = parseFloat(data[i]);
+                let emaAnterior = emaArray[i - 1];
+                let emaActual = (valorActual * k) + (emaAnterior * (1 - k));
+                emaArray.push(parseFloat(emaActual.toFixed(1)));
+            }
+            return emaArray;
+        }
+
+        function calcularSMA(data, ventana = 3) {
+            let resultado = [];
+            for (let i = 0; i < data.length; i++) {
+                let sum = 0; let count = 0;
+                for (let j = 0; j < ventana; j++) {
+                    if (i - j >= 0) { sum += parseFloat(data[i - j]); count++; }
+                }
+                resultado.push((sum / count).toFixed(1));
+            }
+            return resultado;
+        }
+
+        function calcularLIN(data) {
             let n = data.length;
             if (n === 0) return [];
             let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
@@ -378,6 +410,99 @@
             let intercepto = (sumY - pendiente * sumX) / n;
             return data.map((_, i) => (pendiente * i + intercepto).toFixed(1));
         }
+
+        function proyectarFuturo(tendencia, dias = 2) {
+            let proj = [...tendencia];
+            if (proj.length < 2) return proj;
+            
+            // Calculamos la "inercia" usando la pendiente de los últimos 2 días calculados
+            let lastIdx = proj.length - 1;
+            let slope = parseFloat(proj[lastIdx]) - parseFloat(proj[lastIdx - 1]);
+            let ultimoValor = parseFloat(proj[lastIdx]);
+
+            for (let i = 0; i < dias; i++) {
+                ultimoValor += slope;
+                proj.push(ultimoValor.toFixed(1));
+            }
+            return proj;
+        }
+
+        function calcularDiasFuturosStrings(ultimaFechaStr, dias = 2) {
+            let fechasFuturas = [];
+            let ultimaMilisegundos = new Date(ultimaFechaStr + 'T12:00:00Z').getTime(); // Evitar saltos de zona horaria
+            for (let i = 1; i <= dias; i++) {
+                let diaFuturo = new Date(ultimaMilisegundos + (i * 24 * 60 * 60 * 1000));
+                let mm = String(diaFuturo.getMonth() + 1).padStart(2, '0');
+                let dd = String(diaFuturo.getDate()).padStart(2, '0');
+                fechasFuturas.push(`${mm}-${dd}`);
+            }
+            return fechasFuturas;
+        }
+
+        function renderizarGraficaEvolucionCentral() {
+            let modeloSeleccionado = document.getElementById('selector-modelo').value;
+            let tendenciaBase = [];
+
+            if (modeloSeleccionado === 'EMA') tendenciaBase = calcularEMA(globalDataEvolucion, 3);
+            else if (modeloSeleccionado === 'SMA') tendenciaBase = calcularSMA(globalDataEvolucion, 3);
+            else if (modeloSeleccionado === 'LIN') tendenciaBase = calcularLIN(globalDataEvolucion);
+
+            // Proyectar 2 días adelante
+            let tendenciaConProyeccion = proyectarFuturo(tendenciaBase, 2);
+            
+            // Preparar Etiquetas X (Fechas históricas + 2 días)
+            let fechasFormateadas = globalFechasEvolucion.map(f => f.substring(5)); // MM-DD
+            let fechasFuturas = calcularDiasFuturosStrings(globalFechasEvolucion[globalFechasEvolucion.length - 1], 2);
+            let labelsCompletos = [...fechasFormateadas, ...fechasFuturas];
+
+            // Rellenar la data real con "null" para los días futuros para que la línea negra se corte
+            let dataRealConNulls = [...globalDataEvolucion, null, null];
+
+            dibujaGraf('chartEvolucionTotal', {
+                type: 'line',
+                data: {
+                    labels: labelsCompletos, 
+                    datasets: [
+                        { 
+                            label: 'Ocupación Real %', 
+                            data: dataRealConNulls, 
+                            borderColor: '#1e293b', 
+                            backgroundColor: 'rgba(30,41,59,0.1)', 
+                            fill: true, 
+                            tension: 0.1, 
+                            borderWidth: 3, 
+                            spanGaps: false,
+                            datalabels: { 
+                                display: function(context) { return context.dataIndex < globalDataEvolucion.length; }, 
+                                color: '#1e293b', align: 'top', font: { weight: 'bold', size: 10 }, formatter: (v) => v + '%' 
+                            } 
+                        },
+                        { 
+                            label: `Tendencia ${modeloSeleccionado} + Proyección`, 
+                            data: tendenciaConProyeccion, 
+                            borderColor: '#ef4444', 
+                            borderDash: [5, 5], 
+                            borderWidth: 2.5, 
+                            pointRadius: function(context) { return context.dataIndex >= globalDataEvolucion.length ? 4 : 0; }, 
+                            pointBackgroundColor: '#ef4444',
+                            tension: 0.4, 
+                            fill: false, 
+                            datalabels: { 
+                                display: function(context) { return context.dataIndex >= globalDataEvolucion.length; },
+                                color: '#ef4444', align: 'bottom', font: { weight: 'bold', size: 10 }, formatter: (v) => 'Proj: ' + v + '%'
+                            } 
+                        }
+                    ]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { y: { ticks: { stepSize: 10 } } },
+                    plugins: { tooltip: { mode: 'index', intersect: false } }
+                }
+            });
+        }
+
 
         function procesarYRenderizarTodo(pacientes, ocupacion) {
             
@@ -413,20 +538,11 @@
             document.getElementById('kpi-ips-alerta').innerText = ipsAlertaRoja;
             document.getElementById('kpi-total-sobre').innerText = sumSobreGlobal;
 
-            let dataTotalEvolucion = fechasReportadas.map(f => ((evolucionTotalDias[f].pac / evolucionTotalDias[f].cap) * 100).toFixed(1));
-            let tendenciaTotal = calcularTendencia(dataTotalEvolucion);
-
-            dibujaGraf('chartEvolucionTotal', {
-                type: 'line',
-                data: {
-                    labels: fechasReportadas.map(f => f.substring(5)), 
-                    datasets: [
-                        { label: 'Ocupación %', data: dataTotalEvolucion, borderColor: '#1e293b', backgroundColor: 'rgba(30,41,59,0.1)', fill: true, tension: 0.1, borderWidth: 3, datalabels: { display: true, color: '#1e293b', align: 'top', font: { weight: 'bold', size: 10 }, formatter: (v) => v + '%' } },
-                        { label: 'Tendencia', data: tendenciaTotal, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, datalabels: { display: false } }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { stepSize: 10 } } } }
-            });
+            // Guardar variables globales para la gráfica proyectiva
+            globalFechasEvolucion = fechasReportadas;
+            globalDataEvolucion = fechasReportadas.map(f => ((evolucionTotalDias[f].pac / evolucionTotalDias[f].cap) * 100).toFixed(1));
+            
+            renderizarGraficaEvolucionCentral(); // Llamada a la nueva función centralizada
 
             let complejidadAcumulada = { 'Alta Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Mediana Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Baja Complejidad': { cap: 0, sobre: 0, disp: 0 } };
             Object.values(snapshotUltimoDia).forEach(o => {
@@ -550,7 +666,6 @@
             datosTablaIps = Object.values(mapaIps);
             datosTablaEps = Object.values(mapaEps);
 
-            // Gráficas Analítica
             let estArr = [
                 { label: 'PENDIENTES', val: estancias['Pendiente'].count > 0 ? Math.round(estancias['Pendiente'].sum / estancias['Pendiente'].count) : 0, color: '#ef4444' },
                 { label: 'EN TRÁMITE', val: estancias['En trámite'].count > 0 ? Math.round(estancias['En trámite'].sum / estancias['En trámite'].count) : 0, color: '#f59e0b' },
@@ -601,8 +716,6 @@
             Object.keys(dataPorIps).sort().forEach(ips => selector.innerHTML += `<option value="${ips}">${ips}</option>`);
         }
 
-
-        // ================== FUNCIONES TABLA GENERAL ==================
         function filtrarYRenderizarMatrizGral() {
             const texto = document.getElementById('buscador-matriz-gral').value.toLowerCase();
             datosMatrizActual = datosMatrizOriginal.filter(r => r.ips.toLowerCase().includes(texto) || r.complejidad.toLowerCase().includes(texto));
@@ -646,8 +759,6 @@
             });
         }
 
-
-        // ================== FUNCIONES TABLAS ANALÍTICA ==================
         function ordenarTablasAnalitica(tipo, columna) {
             if (tipo === 'ips') { if (sortColIps === columna) sortAscIps = !sortAscIps; else { sortColIps = columna; sortAscIps = false; } } 
             else { if (sortColEps === columna) sortAscEps = !sortAscEps; else { sortColEps = columna; sortAscEps = false; } }
@@ -673,8 +784,6 @@
             });
         }
 
-
-        // ================== FUNCIONES TENDENCIA IPS ==================
         function renderizarGraficaIps() {
             const ipsSel = document.getElementById('selector-ips').value;
             if (!ipsSel) return;
@@ -722,8 +831,6 @@
             });
         }
 
-
-        // ================== UTILIDADES ==================
         function dibujaGraf(id, config) {
             if (instanciasGraficas[id]) instanciasGraficas[id].destroy();
             instanciasGraficas[id] = new Chart(document.getElementById(id).getContext('2d'), config);
