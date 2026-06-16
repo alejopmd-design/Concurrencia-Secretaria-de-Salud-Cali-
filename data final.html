@@ -265,7 +265,7 @@
         <div id="panel-tendencia" class="hidden">
             <div class="card mb-6 bg-blue-50/50 border-blue-200">
                 <label class="block text-xs font-bold text-blue-800 mb-2">SELECCIONE LA INSTITUCIÓN HOSPITALARIA (IPS) A EVALUAR:</label>
-                <select id="selector-ips" onchange="renderizarGraficaIps()" class="input-field border-blue-300 text-blue-900 font-semibold cursor-pointer">
+                <select id="selector-ips" onchange="renderizarGraficaIps()" class="input-field border-blue-300 text-blue-900 font-semibold cursor-pointer w-full">
                     <option value="">Cargando IPS...</option>
                 </select>
             </div>
@@ -348,31 +348,46 @@
             else b.className = "bg-slate-700 text-white text-center py-1.5 text-xs font-bold tracking-wider mb-6 rounded-lg";
         }
 
+        async function extraerDatosPaginados(baseUrl, cabeceras) {
+            let todosLosDatos = [];
+            let offset = 0;
+            const limite = 1000;
+            let hayMasDatos = true;
+
+            while (hayMasDatos) {
+                const url = `${baseUrl}?select=*&offset=${offset}&limit=${limite}`;
+                const res = await fetch(url, { method: 'GET', headers: cabeceras });
+                if (!res.ok) throw new Error("FALLO EN LA COMUNICACIÓN CON SUPABASE.");
+                
+                const data = await res.json();
+                todosLosDatos = todosLosDatos.concat(data);
+                
+                if (data.length < limite) {
+                    hayMasDatos = false; 
+                } else {
+                    offset += limite; 
+                }
+            }
+            return todosLosDatos;
+        }
+
         async function cargarTodoElSistema() {
-            actualizarBanner("⏳ EXTRAYENDO CENSO CONCURRENTE Y OCUPACIÓN CRUE...");
+            actualizarBanner("⏳ DESCARGANDO HISTÓRICO MASIVO DE OCUPACIÓN Y AUDITORÍA...");
             try {
                 const cabeceras = { 'apikey': tokenAnon, 'Authorization': 'Bearer ' + tokenAnon };
                 
-                const [resPacientes, resOcupacion] = await Promise.all([
-                    fetch(`${urlPacientes}?select=*`, { method: 'GET', headers: cabeceras }),
-                    fetch(`${urlOcupacion}?select=*`, { method: 'GET', headers: cabeceras })
+                const [datosPacientes, datosOcupacion] = await Promise.all([
+                    extraerDatosPaginados(urlPacientes, cabeceras),
+                    extraerDatosPaginados(urlOcupacion, cabeceras)
                 ]);
 
-                if (!resPacientes.ok || !resOcupacion.ok) throw new Error("FALLO EN LA COMUNICACIÓN CON SUPABASE.");
-
-                const datosPacientes = await resPacientes.json();
-                const datosOcupacion = await resOcupacion.json();
-
                 procesarYRenderizarTodo(datosPacientes, datosOcupacion);
-                actualizarBanner("✅ ¡ÉXITO! BASES DE DATOS CRUZADAS EN TIEMPO REAL.", "exito");
+                actualizarBanner(`✅ ¡ÉXITO! SE PROCESARON ${datosOcupacion.length} REGISTROS HISTÓRICOS.`, "exito");
             } catch (err) {
                 actualizarBanner(`❌ ERROR: ${err.message}`, "error");
             }
         }
 
-        // ==========================================
-        // FUNCIONES MATEMÁTICAS PARA TENDENCIAS
-        // ==========================================
         function calcularEMA(data, periodos = 3) {
             if (data.length === 0) return [];
             let k = 2 / (periodos + 1);
@@ -415,7 +430,6 @@
             let proj = [...tendencia];
             if (proj.length < 2) return proj;
             
-            // Calculamos la "inercia" usando la pendiente de los últimos 2 días calculados
             let lastIdx = proj.length - 1;
             let slope = parseFloat(proj[lastIdx]) - parseFloat(proj[lastIdx - 1]);
             let ultimoValor = parseFloat(proj[lastIdx]);
@@ -473,7 +487,7 @@
                             borderWidth: 3, 
                             spanGaps: false,
                             datalabels: { 
-                                display: function(context) { return context.dataIndex < globalDataEvolucion.length; }, 
+                                display: function(context) { return context.dataIndex % 3 === 0 && context.dataIndex < globalDataEvolucion.length; }, 
                                 color: '#1e293b', align: 'top', font: { weight: 'bold', size: 10 }, formatter: (v) => v + '%' 
                             } 
                         },
@@ -488,7 +502,7 @@
                             tension: 0.4, 
                             fill: false, 
                             datalabels: { 
-                                display: function(context) { return context.dataIndex >= globalDataEvolucion.length; },
+                                display: function(context) { return (context.dataIndex % 3 === 0 || context.dataIndex === labelsCompletos.length - 1) && context.dataIndex >= globalDataEvolucion.length; },
                                 color: '#ef4444', align: 'bottom', font: { weight: 'bold', size: 10 }, formatter: (v) => 'Proj: ' + v + '%'
                             } 
                         }
@@ -497,7 +511,10 @@
                 options: { 
                     responsive: true, 
                     maintainAspectRatio: false, 
-                    scales: { y: { ticks: { stepSize: 10 } } },
+                    scales: { 
+                        x: { ticks: { callback: function(val, index) { return index % 3 === 0 ? this.getLabelForValue(val) : ''; } } },
+                        y: { ticks: { stepSize: 10 } } 
+                    },
                     plugins: { tooltip: { mode: 'index', intersect: false } }
                 }
             });
@@ -507,7 +524,7 @@
         function procesarYRenderizarTodo(pacientes, ocupacion) {
             
             // ==========================================
-            // 1. LÓGICA PANEL GENERAL
+            // 1. LÓGICA PANEL GENERAL Y NUEVA REGLA (PACIENTES > 0)
             // ==========================================
             let evolucionTotalDias = {}; 
             let snapshotUltimoDia = {}; 
@@ -520,17 +537,30 @@
             ocupacion.forEach(o => {
                 let f = o.fecha_reporte;
                 if (!evolucionTotalDias[f]) evolucionTotalDias[f] = { cap: 0, pac: 0 };
-                evolucionTotalDias[f].cap += o.capacidad_instalada;
-                evolucionTotalDias[f].pac += o.pacientes_actuales;
+                
+                let capacidadNumerica = Number(o.capacidad_instalada) || 0;
+                let pacientesNumericos = Number(o.pacientes_actuales) || 0;
+
+                // 🚨 NUEVA REGLA: Si la IPS reporta 0 pacientes, ignoramos sus camas para el cálculo global.
+                if (pacientesNumericos > 0) {
+                    evolucionTotalDias[f].cap += capacidadNumerica;
+                    evolucionTotalDias[f].pac += pacientesNumericos;
+                }
 
                 if (f === fechaUltimoReporteGlobal) {
                     snapshotUltimoDia[o.ips_nombre] = o;
-                    let capLocal = Number(o.capacidad_instalada) || 1;
-                    let censoLocal = Number(o.pacientes_actuales) || 0;
+                    let capLocal = capacidadNumerica || 1; 
+                    let censoLocal = pacientesNumericos;
                     let sobreLocal = censoLocal > capLocal ? censoLocal - capLocal : 0;
+                    
                     if ((censoLocal / capLocal) * 100 > 150) ipsAlertaRoja++;
                     
-                    sumCapGlobal += capLocal; sumCensoGlobal += censoLocal; sumSobreGlobal += sobreLocal;
+                    // Aplicar la misma regla de pacientes > 0 al KPI global del dashboard
+                    if (censoLocal > 0) {
+                        sumCapGlobal += capLocal; 
+                        sumCensoGlobal += censoLocal; 
+                    }
+                    sumSobreGlobal += sobreLocal;
                 }
             });
 
@@ -540,9 +570,12 @@
 
             // Guardar variables globales para la gráfica proyectiva
             globalFechasEvolucion = fechasReportadas;
-            globalDataEvolucion = fechasReportadas.map(f => ((evolucionTotalDias[f].pac / evolucionTotalDias[f].cap) * 100).toFixed(1));
+            globalDataEvolucion = fechasReportadas.map(f => {
+                let obj = evolucionTotalDias[f];
+                return obj.cap > 0 ? ((obj.pac / obj.cap) * 100).toFixed(1) : 0;
+            });
             
-            renderizarGraficaEvolucionCentral(); // Llamada a la nueva función centralizada
+            renderizarGraficaEvolucionCentral(); 
 
             let complejidadAcumulada = { 'Alta Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Mediana Complejidad': { cap: 0, sobre: 0, disp: 0 }, 'Baja Complejidad': { cap: 0, sobre: 0, disp: 0 } };
             Object.values(snapshotUltimoDia).forEach(o => {
@@ -702,8 +735,15 @@
             fechasGlobales.forEach(f => { sumaCensoRedPorFecha[f] = 0; sumaCapRedPorFecha[f] = 0; });
             ocupacion.forEach(o => {
                 let f = o.fecha_reporte; let ips = o.ips_nombre;
-                sumaCensoRedPorFecha[f] += (Number(o.pacientes_actuales) || 0);
-                sumaCapRedPorFecha[f] += (Number(o.capacidad_instalada) || 0);
+                let censoLocal = Number(o.pacientes_actuales) || 0;
+                let capLocal = Number(o.capacidad_instalada) || 0;
+                
+                // Aplicar la misma regla de ignorar camas vacías en la curva comparativa
+                if (censoLocal > 0) {
+                    sumaCensoRedPorFecha[f] += censoLocal;
+                    sumaCapRedPorFecha[f] += capLocal;
+                }
+
                 if (!dataPorIps[ips]) dataPorIps[ips] = {};
                 dataPorIps[ips][f] = { pct: o.porcentaje_ocupacion, cap: o.capacidad_instalada, censo: o.pacientes_actuales };
             });
@@ -826,7 +866,13 @@
                             return c.dataset.label + ': ' + c.parsed.y + '%'; 
                         } } }
                     },
-                    scales: { y: { beginAtZero: true, suggestedMax: 150, title: { display: true, text: '% OCUPACIÓN', font: { weight: 'bold' } } }, x: { grid: { display: false } } }
+                    scales: { 
+                        y: { beginAtZero: true, suggestedMax: 150, title: { display: true, text: '% OCUPACIÓN', font: { weight: 'bold' } } }, 
+                        x: { 
+                            grid: { display: false },
+                            ticks: { callback: function(val, index) { return index % 3 === 0 ? this.getLabelForValue(val) : ''; } }
+                        } 
+                    }
                 }
             });
         }
