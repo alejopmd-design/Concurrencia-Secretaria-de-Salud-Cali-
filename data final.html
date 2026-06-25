@@ -8,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -108,19 +109,49 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div class="card lg:col-span-2">
-                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">⚖️ IMPACTO OPERATIVO: PACIENTES PENDIENTES VS OCUPACIÓN DE LA IPS</h2>
-                    <div class="chart-container" style="height: 280px;">
-                        <canvas id="chartComparativoAuditoriaSaturacion"></canvas>
+            <div class="card shadow-md border-t-4 border-t-blue-600 mb-6">
+                <h2 class="text-lg font-bold text-slate-800 tracking-wide mb-4">🔬 IMPACTO OPERATIVO EN LA SOBREOCUPACIÓN</h2>
+                
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-sm w-full">
+                        <label for="datePickerInfluencia" class="font-black text-slate-800 text-sm tracking-wider">🗓️ CONSULTAR FECHA:</label>
+                        <input type="date" id="datePickerInfluencia" class="border-2 border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-500 transition cursor-pointer bg-white">
+                        
+                        <button id="btnSearchInfluencia" class="bg-slate-800 text-white px-5 py-2 rounded-lg font-black text-sm hover:bg-slate-700 transition shadow-md flex items-center gap-2">
+                            🔍 BUSCAR DÍA
+                        </button>
+                        <div class="hidden md:block w-px h-6 bg-slate-300 mx-2"></div>
+                        <button id="btnHistoricoInfluencia" class="bg-indigo-600 text-white px-5 py-2 rounded-lg font-black text-sm hover:bg-indigo-700 transition shadow-md flex items-center gap-2">
+                            📊 VER PROMEDIO HISTÓRICO GLOBAL
+                        </button>
                     </div>
                 </div>
 
-                <div class="card">
-                    <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-1">🚨 TOP 5 IPS CON MAYOR SOBREOCUPACIÓN</h2>
-                    <div class="chart-container" style="height: 280px;">
-                        <canvas id="chartTopSobreocupacion"></canvas>
+                <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6 flex flex-wrap justify-center items-center gap-x-8 gap-y-4 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 bg-[#ef4444] rounded-sm shadow-sm"></div>
+                        <span class="text-xs font-bold text-slate-700 tracking-wide">ROJO: OCUPACIÓN CRÍTICA (> 150%)</span>
                     </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 bg-[#f59e0b] rounded-sm shadow-sm"></div>
+                        <span class="text-xs font-bold text-slate-700 tracking-wide">AMARILLO: ALERTA (101% - 150%)</span>
+                    </div>
+                    <div class="hidden md:block w-px h-6 bg-slate-300"></div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 bg-[#2563eb] rounded flex items-center justify-center text-[10px] text-white font-black shadow-sm">%</div>
+                        <span class="text-xs font-bold text-slate-700 tracking-wide">CUADROS AZULES: % INFLUENCIA EN LA RED</span>
+                    </div>
+                </div>
+
+                <div class="chart-container relative" style="height: 480px; width: 100%;">
+                    <div id="empty-state-influencia" class="absolute inset-0 flex items-center justify-center bg-white/90 z-10 hidden rounded-xl">
+                        <div class="text-center">
+                            <div class="text-5xl mb-2">📭</div>
+                            <h3 class="text-xl font-black text-slate-800">SIN REGISTROS</h3>
+                            <p class="text-slate-500 font-semibold text-sm">El CRUE no reportó datos consolidados para la fecha seleccionada.</p>
+                        </div>
+                    </div>
+                    <canvas id="chartInfluencia"></canvas>
                 </div>
             </div>
 
@@ -322,7 +353,12 @@
         let promedioRedPorFecha = {};
         let dataPorIps = {};
 
+        // Variables para Impacto Operativo
+        let datosCompletosOcupacion = [];
+        let graficaInfluencia = null;
+
         Chart.register(ChartDataLabels);
+        Chart.register(window['chartjs-plugin-annotation']); 
         Chart.defaults.font.family = "'Inter', sans-serif";
         Chart.defaults.color = '#64748b';
         Chart.defaults.plugins.datalabels.display = false; 
@@ -381,7 +417,10 @@
                     extraerDatosPaginados(urlOcupacion, cabeceras)
                 ]);
 
+                datosCompletosOcupacion = datosOcupacion; // Guardar globalmente para Impacto Operativo
                 procesarYRenderizarTodo(datosPacientes, datosOcupacion);
+                inicializarComponenteInfluencia(); // Iniciar panel de impacto
+                
                 actualizarBanner(`✅ ¡ÉXITO! SE PROCESARON ${datosOcupacion.length} REGISTROS HISTÓRICOS.`, "exito");
             } catch (err) {
                 actualizarBanner(`❌ ERROR: ${err.message}`, "error");
@@ -612,8 +651,6 @@
             });
 
             datosMatrizOriginal = [];
-            let ipsSobreocupacion = [];
-            let comparativaArray = []; 
 
             Object.entries(snapshotUltimoDia).forEach(([ipsNombre, o]) => {
                 let auditoriaMatch = { total: 0, pendientes: 0 };
@@ -624,30 +661,7 @@
                 let cap = Number(o.capacidad_instalada) || 1; let censo = Number(o.pacientes_actuales) || 0;
                 let sobre = censo > cap ? censo - cap : 0; let pct = parseFloat(((censo / cap) * 100).toFixed(1));
 
-                if (sobre > 0) ipsSobreocupacion.push({ ips: ipsNombre.substring(0, 15), valor: sobre });
-                if (auditoriaMatch.total > 0 || pct > 130) comparativaArray.push({ ips: ipsNombre.substring(0, 15), ocupacion: pct, pendientes: auditoriaMatch.pendientes });
-
                 datosMatrizOriginal.push({ ips: ipsNombre, complejidad: o.nivel_complejidad, capacidad: cap, censo: censo, sobreocupacion: sobre, porcentaje: pct, auditoria_total: auditoriaMatch.total, auditoria_pend: auditoriaMatch.pendientes });
-            });
-
-            comparativaArray.sort((a, b) => b.ocupacion - a.ocupacion);
-            dibujaGraf('chartComparativoAuditoriaSaturacion', {
-                type: 'bar',
-                data: {
-                    labels: comparativaArray.map(d => d.ips),
-                    datasets: [
-                        { label: 'Ocupación IPS %', data: comparativaArray.map(d => d.ocupacion), backgroundColor: comparativaArray.map(d => d.ocupacion > 150 ? '#ef4444' : (d.ocupacion > 100 ? '#f59e0b' : '#10b981')), yAxisID: 'yOcupacion' },
-                        { label: 'Pacientes Pend. Gestión', data: comparativaArray.map(d => d.pendientes), backgroundColor: '#2563eb', yAxisID: 'yAuditoria', barPercentage: 0.5 }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, scales: { yOcupacion: { type: 'linear', position: 'left', ticks: { stepSize: 20 } }, yAuditoria: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } } } }
-            });
-
-            ipsSobreocupacion.sort((a,b) => b.valor - a.valor);
-            dibujaGraf('chartTopSobreocupacion', {
-                type: 'bar',
-                data: { labels: ipsSobreocupacion.slice(0, 5).map(i => i.ips), datasets: [{ label: 'Pacientes Extras', data: ipsSobreocupacion.slice(0, 5).map(i => i.valor), backgroundColor: '#ef4444', borderRadius: 4 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true, color: '#ffffff', font: { weight: 'bold' } } } }
             });
 
             datosMatrizActual = [...datosMatrizOriginal];
@@ -880,6 +894,284 @@
         function dibujaGraf(id, config) {
             if (instanciasGraficas[id]) instanciasGraficas[id].destroy();
             instanciasGraficas[id] = new Chart(document.getElementById(id).getContext('2d'), config);
+        }
+
+        // ==========================================
+        // FUNCIONES PARA IMPACTO OPERATIVO
+        // ==========================================
+        function obtenerPrioridadInfluencia(nombre) {
+            let n = nombre.toUpperCase();
+            if (n.includes('VERSALLES')) {
+                if (n.includes('MARCOS') || n.includes('NORTE')) return 2; 
+                else return 1; 
+            }
+            if (n.includes('OCCIDENTE') || n.includes('REMEDIOS') || n.includes('ISAIAS') || n.includes('ISAÍAS') || (n.includes('NUESTRA') && !n.includes('REMEDIOS'))) {
+                return 1;
+            }
+            return 2; 
+        }
+
+        function formatearNombreInfluencia(nombre) {
+            if(!nombre) return "DESCONOCIDA";
+            let n = nombre.toUpperCase();
+            
+            if (n.includes('VIRREY') && n.includes('VERSALLES')) return 'VIRREY SOLIS VERSALLES';
+            if (n.includes('VERSALLES') && n.includes('MARCOS')) return 'CLÍN. VERSALLES S. MARCOS';
+            if (n.includes('VERSALLES') && n.includes('NORTE')) return 'CLÍN. VERSALLES NORTE';
+            if (n.includes('OCCIDENTE')) return 'CLÍN. OCCIDENTE';
+            if (n.includes('REMEDIOS')) return 'C. NSTRA SRA REMEDIOS';
+            if (n.includes('ISAIAS') || n.includes('ISAÍAS')) return 'HOSP. ISAÍAS DUARTE';
+            if (n.includes('NUESTRA') && !n.includes('REMEDIOS')) return 'CLÍN. NUESTRA';
+            if (n.includes('VERSALLES') && !n.includes('VIRREY') && !n.includes('MARCOS') && !n.includes('NORTE')) return 'CLÍN. VERSALLES';
+            
+            if (n.includes('IMBANACO')) return 'C.M. IMBANACO';
+            if (n.includes('EVARISTO GARCIA') || n.includes('UNIVERSITARIO DEL VALLE')) return 'H.U.V. EVARISTO GARCÍA';
+            if (n.includes('MARIO CORREA')) return 'HOSP. MARIO CORREA R.';
+            if (n.includes('CLUB NOEL')) return 'CLÍN. CLUB NOEL';
+            if (n.includes('PSIQUIATRICO UNIVERSITARIO')) return 'HOSP. PSIQUIÁTRICO';
+            if (n.includes('VALLE LILI') || n.includes('VALLE DEL LILI')) return 'FUND. VALLE DEL LILI';
+            
+            n = n.replace('EMPRESA SOCIAL DEL ESTADO', '').replace('E.S.E.', '').replace('E.S.E', '').replace('S.A.S.', '').replace('S.A.S', '').replace('S.A.', '').replace('SEDE PRINCIPAL', '').replace('SEDE', '').replace('COMPLEJO MEDICO', '').replace('COMPLEJO MÉDICO', '').replace('CENTRO MEDICO', 'C.M.').replace('CENTRO MÉDICO', 'C.M.').replace('CLINICA', 'CLÍN.').replace('CLÍNICA', 'CLÍN.').replace('HOSPITAL', 'HOSP.').replace('FUNDACION', 'FUND.').replace('FUNDACIÓN', 'FUND.');
+
+            n = n.trim().replace(/\s+/g, ' ');
+            if (n.length > 25) return n.substring(0, 23) + '...';
+            return n;
+        }
+
+        function inicializarComponenteInfluencia() {
+            if (datosCompletosOcupacion.length === 0) return;
+            let fechasDisponibles = [...new Set(datosCompletosOcupacion.map(o => o.fecha_reporte))].sort();
+            if(fechasDisponibles.length === 0) return;
+
+            const datePicker = document.getElementById('datePickerInfluencia');
+            const ultimaFecha = fechasDisponibles[fechasDisponibles.length - 1];
+            const primeraFecha = fechasDisponibles[0];
+            
+            datePicker.min = primeraFecha;
+            datePicker.max = ultimaFecha;
+            datePicker.value = ultimaFecha; 
+
+            document.getElementById('btnSearchInfluencia').addEventListener('click', () => procesarFechaInfluencia(datePicker.value));
+            document.getElementById('btnHistoricoInfluencia').addEventListener('click', procesarHistoricoInfluencia);
+
+            procesarFechaInfluencia(ultimaFecha);
+        }
+
+        function procesarFechaInfluencia(fechaConsultada) {
+            const emptyState = document.getElementById('empty-state-influencia');
+            let datosDelDia = datosCompletosOcupacion.filter(o => o.fecha_reporte === fechaConsultada);
+
+            if (datosDelDia.length === 0) {
+                emptyState.classList.remove('hidden');
+                if (graficaInfluencia) { graficaInfluencia.destroy(); graficaInfluencia = null; }
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            let totalSobreocupacionRed = 0;
+            datosDelDia.forEach(ips => totalSobreocupacionRed += (Number(ips.sobreocupacion) || 0));
+
+            let procesado = datosDelDia.map(ips => {
+                let cap = Number(ips.capacidad_instalada) || 1;
+                let censo = Number(ips.pacientes_actuales) || 0;
+                let sobre = Number(ips.sobreocupacion) || 0;
+                let pctOcupacion = (censo / cap) * 100;
+                let influencia = totalSobreocupacionRed > 0 ? (sobre / totalSobreocupacionRed) * 100 : 0;
+
+                let colorSemaforo = '#10b981'; 
+                if (pctOcupacion > 150) colorSemaforo = '#ef4444'; 
+                else if (pctOcupacion > 100) colorSemaforo = '#f59e0b'; 
+
+                return {
+                    nombre: formatearNombreInfluencia(ips.ips_nombre),
+                    sobre: sobre,
+                    influencia: influencia,
+                    color: colorSemaforo,
+                    prioridad: obtenerPrioridadInfluencia(ips.ips_nombre),
+                    nombreOriginal: ips.ips_nombre 
+                };
+            });
+
+            procesado.sort((a, b) => {
+                if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
+                return b.sobre - a.sobre; 
+            });
+
+            dibujarInfluencia(procesado);
+        }
+
+        function procesarHistoricoInfluencia() {
+            const emptyState = document.getElementById('empty-state-influencia');
+            emptyState.classList.add('hidden');
+            
+            let statsPorIps = {};
+            
+            datosCompletosOcupacion.forEach(r => {
+                let ips = r.ips_nombre;
+                let cap = Number(r.capacidad_instalada) || 1;
+                let censo = Number(r.pacientes_actuales) || 0;
+                let sobre = Number(r.sobreocupacion) || 0;
+                let pct = (censo / cap) * 100;
+
+                if (!statsPorIps[ips]) statsPorIps[ips] = { sumSobre: 0, conteoDiasTotales: 0, sumPct: 0, diasOperativos: 0 };
+                
+                statsPorIps[ips].sumSobre += sobre;
+                statsPorIps[ips].conteoDiasTotales++;
+                
+                if (pct > 0) { 
+                    statsPorIps[ips].sumPct += pct;
+                    statsPorIps[ips].diasOperativos++;
+                }
+            });
+
+            let procesado = [];
+            let totalSobreocupacionRedPromedio = 0;
+
+            for (let ips in statsPorIps) {
+                let s = statsPorIps[ips];
+                let promSobre = s.sumSobre / s.conteoDiasTotales; 
+                totalSobreocupacionRedPromedio += promSobre;
+                let promPct = s.diasOperativos > 0 ? (s.sumPct / s.diasOperativos) : 0;
+                
+                let colorSemaforo = '#10b981'; 
+                if (promPct > 150) colorSemaforo = '#ef4444'; 
+                else if (promPct > 100) colorSemaforo = '#f59e0b';
+
+                procesado.push({
+                    nombre: formatearNombreInfluencia(ips),
+                    sobre: parseFloat(promSobre.toFixed(1)), 
+                    color: colorSemaforo,
+                    prioridad: obtenerPrioridadInfluencia(ips),
+                    nombreOriginal: ips
+                });
+            }
+
+            procesado.forEach(p => p.influencia = totalSobreocupacionRedPromedio > 0 ? (p.sobre / totalSobreocupacionRedPromedio) * 100 : 0);
+
+            procesado.sort((a, b) => {
+                if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
+                return b.sobre - a.sobre; 
+            });
+
+            dibujarInfluencia(procesado);
+        }
+
+        function dibujarInfluencia(procesado) {
+            let labels = procesado.map(x => x.nombre);
+            let dataSobreocupacion = procesado.map(x => x.sobre);
+            let dataInfluencia = procesado.map(x => parseFloat(x.influencia.toFixed(1)));
+            let bgColors = procesado.map(x => x.color);
+            let nombresCompletos = procesado.map(x => x.nombreOriginal);
+
+            let numIntervenidas = procesado.filter(x => x.prioridad === 1).length;
+
+            if (graficaInfluencia) { graficaInfluencia.destroy(); }
+
+            const ctx = document.getElementById('chartInfluencia').getContext('2d');
+            
+            graficaInfluencia = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Pacientes en Sobreocupación',
+                            data: dataSobreocupacion,
+                            influencia: dataInfluencia, 
+                            nombresCompletos: nombresCompletos,
+                            backgroundColor: bgColors,
+                            borderRadius: 6,
+                            barPercentage: 0.75,
+                            datalabels: {
+                                labels: {
+                                    pacientes: {
+                                        align: 'end',
+                                        anchor: 'end',
+                                        offset: 4,
+                                        color: '#0f172a',
+                                        font: { weight: '900', size: 12 },
+                                        display: function(context) { return context.dataset.data[context.dataIndex] > 0; },
+                                        formatter: (val) => val 
+                                    },
+                                    porcentaje: {
+                                        align: 'end',
+                                        anchor: 'end',
+                                        offset: function(ctx) { return ctx.dataIndex % 2 === 0 ? 28 : 54; }, 
+                                        backgroundColor: '#2563eb', 
+                                        color: '#ffffff',
+                                        borderRadius: 5,
+                                        font: { weight: 'bold', size: 9 },
+                                        padding: { top: 3, bottom: 3, left: 5, right: 5 },
+                                        display: function(context) { return context.dataset.influencia[context.dataIndex] > 0; },
+                                        formatter: (val, ctx) => { return ctx.dataset.influencia[ctx.dataIndex] + '%'; }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 70 } },
+                    plugins: {
+                        legend: { display: false }, 
+                        annotation: {
+                            clip: false, 
+                            annotations: {
+                                cajaFoco: {
+                                    type: 'box',
+                                    xMin: -0.5,
+                                    xMax: numIntervenidas > 0 ? numIntervenidas - 0.5 : -0.5, 
+                                    backgroundColor: 'rgba(226, 232, 240, 0.35)', 
+                                    borderWidth: 1.5,
+                                    borderColor: 'rgba(100, 116, 139, 0.4)',
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: numIntervenidas > 0,
+                                        content: 'IPS INTERVENIDAS',
+                                        position: 'start', 
+                                        yAdjust: -38, 
+                                        color: '#0f172a',
+                                        font: { weight: '900', size: 13, family: "'Inter', sans-serif" },
+                                        backgroundColor: 'transparent'
+                                    }
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleFont: { size: 13, weight: 'bold' },
+                            bodyFont: { size: 12 },
+                            padding: 12,
+                            callbacks: {
+                                title: function(context) { return context[0].dataset.nombresCompletos[context[0].dataIndex]; },
+                                label: function(c) {
+                                    let inf = c.dataset.influencia[c.dataIndex];
+                                    return [
+                                        `📌 Pacientes en Exceso: ${c.parsed.y}`,
+                                        `📊 Influencia en la Red: Aporta el ${inf}%`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { font: { size: 10, weight: 'bold' }, maxRotation: 45, minRotation: 45, autoSkip: false, color: '#475569' },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'CANTIDAD DE PACIENTES EN SOBREOCUPACIÓN', font: { weight: '900', size: 11 }, color: '#64748b' },
+                            ticks: { font: { weight: 'bold' }, color: '#94a3b8' },
+                            grid: { borderDash: [4, 4], color: '#e2e8f0' },
+                            suggestedMax: Math.max(...dataSobreocupacion) * 1.5 
+                        }
+                    }
+                }
+            });
         }
 
         function exportarInformePDF() {
